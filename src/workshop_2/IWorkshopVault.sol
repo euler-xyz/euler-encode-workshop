@@ -19,6 +19,9 @@ interface IWorkshopVault is IVault {
     // [ASSIGNMENT]: - _convertToShares()
     // [ASSIGNMENT]: - _convertToAssets()
 
+    // [ASSIGNMENT]: don't forget about implementing and using modified version of the _msgSender() function for the
+    // borrowing purposes
+
     // [ASSIGNMENT] optional: add interest accrual
     // [ASSIGNMENT] optional: integrate with an oracle of choice in checkAccountStatus() and liquidate()
     // [ASSIGNMENT] optional: implement a circuit breaker in checkVaultStatus(), may be EIP-7265 inspired

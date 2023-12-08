@@ -7,6 +7,17 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
     "openzeppelin/=lib/openzeppelin-contracts/contracts/",
     "evc/=lib/ethereum-vault-connector/src/",
+    "evc-playground/=lib/evc-playground/src/",
     "a16z-erc4626-tests/=lib/erc4626-tests/"
 ]
 
+[profile.default.fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+multiline_func_header = "params_first"
+quote_style = "double"
+number_underscore = "preserve"
+override_spacing = true
+wrap_comments = true

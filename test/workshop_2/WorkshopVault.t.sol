@@ -5,15 +5,18 @@ pragma solidity ^0.8.19;
 import {ERC4626Test} from "a16z-erc4626-tests/ERC4626.test.sol";
 import "openzeppelin/mocks/token/ERC20Mock.sol";
 import "evc/EthereumVaultConnector.sol";
-import "../../src/workshop_1/WorkshopVault.sol";
+import "../../src/workshop_2/WorkshopVault.sol";
 
 contract TestVault is WorkshopVault {
     bool internal shouldRunOriginalAccountStatusCheck;
     bool internal shouldRunOriginalVaultStatusCheck;
 
-    constructor(IEVC _evc, IERC20 _asset, string memory _name, string memory _symbol)
-        WorkshopVault(_evc, _asset, _name, _symbol)
-    {}
+    constructor(
+        IEVC _evc,
+        IERC20 _asset,
+        string memory _name,
+        string memory _symbol
+    ) WorkshopVault(_evc, _asset, _name, _symbol) {}
 
     function setShouldRunOriginalAccountStatusCheck(bool _shouldRunOriginalAccountStatusCheck) external {
         shouldRunOriginalAccountStatusCheck = _shouldRunOriginalAccountStatusCheck;
@@ -23,11 +26,10 @@ contract TestVault is WorkshopVault {
         shouldRunOriginalVaultStatusCheck = _shouldRunOriginalVaultStatusCheck;
     }
 
-    function checkAccountStatus(address account, address[] calldata collaterals)
-        public
-        override
-        returns (bytes4 magicValue)
-    {
+    function checkAccountStatus(
+        address account,
+        address[] calldata collaterals
+    ) public override returns (bytes4 magicValue) {
         return shouldRunOriginalAccountStatusCheck
             ? super.checkAccountStatus(account, collaterals)
             : this.checkAccountStatus.selector;
@@ -57,7 +59,30 @@ contract VaultTest is ERC4626Test {
         );
     }
 
-    function test_assignment_basicFlow(address alice, address bob, address charlie, uint64 amount) public {
+    function test_DepositWithEVC(address alice, uint64 amount) public {
+        vm.assume(alice != address(0) && alice != address(_evc_) && alice != address(_vault_));
+        vm.assume(amount > 0);
+
+        ERC20 underlying = ERC20(_underlying_);
+        WorkshopVault vault = WorkshopVault(_vault_);
+
+        // mint some assets to alice
+        ERC20Mock(_underlying_).mint(alice, amount);
+
+        // alice approves the vault to spend her assets
+        vm.prank(alice);
+        underlying.approve(address(vault), type(uint256).max);
+
+        // alice deposits assets through the EVC
+        vm.prank(alice);
+        _evc_.call(address(vault), alice, 0, abi.encodeWithSelector(IERC4626.deposit.selector, amount, alice));
+
+        // verify alice's balance
+        assertEq(underlying.balanceOf(alice), 0);
+        assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
+    }
+
+    function test_assignment_BasicFlow(address alice, address bob, address charlie, uint64 amount) public {
         vm.assume(alice != address(0) && alice != address(_evc_) && alice != address(_vault_));
         vm.assume(bob != address(0) && bob != address(_evc_) && bob != address(_vault_));
         vm.assume(charlie != address(0) && charlie != address(_evc_) && charlie != address(_vault_));
@@ -84,7 +109,7 @@ contract VaultTest is ERC4626Test {
 
         // charlie deposits assets on alice's behalf
         vm.prank(charlie);
-        _evc_.call(address(vault), alice, 0, abi.encodeWithSelector(WorkshopVault.deposit.selector, amount, alice));
+        _evc_.call(address(vault), alice, 0, abi.encodeWithSelector(IERC4626.deposit.selector, amount, alice));
 
         // verify alice's balance
         assertEq(underlying.balanceOf(alice), 0);
