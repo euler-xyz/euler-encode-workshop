@@ -24,8 +24,8 @@ git clone https://github.com/euler-xyz/euler-encode-workshop.git && cd euler-enc
 
 Workshop presentation slides can be found here:
 
-* [Workshop 1]()
-* [Workshop 2]()
+* [Workshop 1](https://docs.google.com/presentation/d/1nQfDXEJFMHLgT8JYrPZxzeVS3b5mPBwLhJOuTntjzyo/edit?usp=sharing)
+* [Workshop 2](https://docs.google.com/presentation/d/1cYceiIXRDbtpzzimj0QuOh4wY53ZfSjKYaugQz_cql0/edit?usp=sharing)
 * [Workshop 3]()
 
 ## Assignments

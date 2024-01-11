@@ -13,6 +13,3 @@
 [submodule "lib/evc-playground"]
 	path = lib/evc-playground
 	url = https://github.com/euler-xyz/evc-playground
-[submodule "slides/reveal.js"]
-	path = slides/reveal.js
-	url = https://github.com/hakimel/reveal.js.git
