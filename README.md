@@ -48,7 +48,7 @@ git clone https://github.com/your-username/euler-encode-workshop.git && cd euler
 
 Create a new branch for your assignment. Replace `branch-name` with the name relevant to the assignment you wish to complete:
 
-|Assignment|`branch-name`|Prize|
+|Assignment|`branch-name`|Prize Pool|
 |---|---|---|
 |Workshop 2 Questionnaire|`assignment-q2`|$500|
 |Workshop 3 Questionnaire|`assignment-q3`|$500|
