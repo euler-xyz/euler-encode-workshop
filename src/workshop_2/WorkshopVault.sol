@@ -20,6 +20,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+    // Ensures function execution through Ethereum Vault Connector (EVC) for added security or custom logic.
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -33,7 +34,10 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
+    // May not be needed for generic operations or when account status is pre-validated.
+    
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+    //  Essential for ensuring vault health but may be skipped in operations not affecting vault state.
     modifier withChecks(address account) {
         _;
 
@@ -46,7 +50,10 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
+    // may be insufficient for secure borrow operations; requires enhanced verification methods.
+
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+    // tt should be guarded with appropriate access controls.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +65,13 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+    // allows disabling the controller for security/operational reasons, but should be used cautiously with proper access controls.
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // evaluating account health for transactions like borrowing or trading, and risk assessment.
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +85,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // ssessing vault's overall health, liquidity levels, risk parameters, and before sensitive operations.
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -84,6 +94,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
+        // implement historical state access or snapshots for accurate health evaluation.
 
         return IVault.checkVaultStatus.selector;
     }
