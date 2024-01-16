@@ -21,6 +21,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
     modifier callThroughEVC() {
+    // This modifier allows the function to be called either directly or through the evc contract.
+    // If called directly, it attempts to forward the call to the evc contract, and then return the result.
         if (msg.sender == address(evc)) {
             _;
         } else {
@@ -36,7 +38,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // [ASSIGNMENT]: is the vault status check always necessary? why?
     modifier withChecks(address account) {
         _;
-
+    // The account status check might not be necessary in certain situations because
+    // some functions are designed to be called without specifying a particular account
+    // (e.g., disableController), in which case only the vault status check is required.
         if (account == address(0)) {
             evc.requireVaultStatusCheck();
         } else {
@@ -48,6 +52,11 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // operations? why?
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
     function _msgSender() internal view virtual override returns (address) {
+    // This function is used to determine the sender of the message.
+    // If the sender is the evc contract, it retrieves the actual account on behalf of which
+    // the operation is performed. However, this alone may not be sufficient for safe borrowing,
+    // as it doesn't explicitly check for borrowing permissions. It should be modified to include
+    // additional checks for borrowing authorization if necessary.
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
             return onBehalfOfAccount;
@@ -58,11 +67,16 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+    // This function is necessary to disable the controller. It is not safe to unconditionally disable the controller
+    // because it should only be done by authorized entities. The function checks the caller's authority through the
+    // _msgSender() function, which ensures that only the authorized entity (possibly evc) can disable the controller.
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // This function is likely used during the process of evaluating the health of an account.
+    // Use cases may include risk assessment, collateral evaluation, or determining borrowing capacity.
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +90,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // This function is likely used during the process of evaluating the health of the overall vault.
+    // Use cases may include assessing the total value of assets, liquidity, or any other factors affecting
+    // the overall health of the vault.
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -84,6 +101,10 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
+        // If the vault status check needs access to the initial state of the vault, the contract may need to store
+        // relevant information during initialization or have a way to retrieve historical data to perform accurate
+        // evaluations. Additionally, interactions with other contracts or oracles could be considered to obtain necessary
+        // information about the vault's initial state.
 
         return IVault.checkVaultStatus.selector;
     }
