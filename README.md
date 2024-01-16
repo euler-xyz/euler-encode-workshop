@@ -48,11 +48,11 @@ git clone https://github.com/your-username/euler-encode-workshop.git && cd euler
 
 Create a new branch for your assignment. Replace `branch-name` with the name relevant to the assignment you wish to complete:
 
-|Assignment|`branch-name`|Prize Pool|
-|---|---|---|
-|Workshop 2 Questionnaire|`assignment-q2`|$500|
-|Workshop 3 Questionnaire|`assignment-q3`|$500|
-|Workshop 2/3 Coding Assignment|`assignment-c`|$2000|
+|Assignment|`branch-name`|Prize Pool|Rules|Deadline|
+|---|---|---|---|---|
+|Workshop 2 Questionnaire|`assignment-q2`|$500|FCFS for 10 participants|No deadline|
+|Workshop 3 Questionnaire|`assignment-q3`|$500|FCFS for 10 participants|No deadline|
+|Workshop 2/3 Coding Assignment|`assignment-c`|$2000|5 best submissions; both Workshops judged together|Jan 31st midnight UTC|
 
 ```sh
 git checkout master && git checkout -b branch-name
@@ -72,7 +72,7 @@ git add . && git commit -m "assignment completed" && git push origin branch-name
 
 6. Create a Pull Request
 
-Finally, go back to your forked repository on the GitHub website and click "Pull requests" at the top and then click "New pull request". From the dropdown menu, select the relevant branch of your forked repository and `master` branch of the original repository, then click "Create pull request".
+Finally, go back to your forked repository on the GitHub website and click "Pull requests" at the top and then click "New pull request". From the dropdown menu, select the relevant branch of your forked repository and `master` branch of the original repository, then click "Create pull request". The PR title should be as in the Assignment column from the table above.
 
 7. Repeat
 
