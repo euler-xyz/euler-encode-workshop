@@ -32,6 +32,12 @@ Workshop presentation slides can be found here:
 
 Fork this repository and complete the assignments. Create a PR to merge your solution with the `master` branch of this repository. To do that, follow the instructions:
 
+|Assignment|`branch-name`|Prize Pool|Rules|Deadline|    
+|---|---|---|---|---|
+|Workshop 2 Questionnaire|`assignment-q2`|$500|FCFS for 10 participants|No deadline|
+|Workshop 3 Questionnaire|`assignment-q3`|$500|FCFS for 10 participants|No deadline|
+|Workshop 2/3 Coding Assignment|`assignment-c`|$2000|5 best submissions; both Workshops judged together|Jan 31st midnight UTC|
+
 1. Fork the Repository
 
 First, you need to fork this repository on GitHub. Go to the [repository](https://github.com/euler-xyz/euler-encode-workshop.git) and click the "Fork" button in the upper right corner.
@@ -46,13 +52,7 @@ git clone https://github.com/your-username/euler-encode-workshop.git && cd euler
 
 3. Create a New Branch
 
-Create a new branch for your assignment. Replace `branch-name` with the name relevant to the assignment you wish to complete:
-
-|Assignment|`branch-name`|Prize Pool|Rules|Deadline|
-|---|---|---|---|---|
-|Workshop 2 Questionnaire|`assignment-q2`|$500|FCFS for 10 participants|No deadline|
-|Workshop 3 Questionnaire|`assignment-q3`|$500|FCFS for 10 participants|No deadline|
-|Workshop 2/3 Coding Assignment|`assignment-c`|$2000|5 best submissions; both Workshops judged together|Jan 31st midnight UTC|
+Create a new branch for your assignment. Replace `branch-name` with the name relevant to the assignment you wish to complete as per the table above.
 
 ```sh
 git checkout master && git checkout -b branch-name
