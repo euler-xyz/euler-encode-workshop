@@ -49,9 +49,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
-	// Yes, _msgSender is overridden so that the valut can get the autenticated address from the EVC
+	// No, _msgSender is overridden so the vault can get the authenticated address from the EVC, not for the sake of borrow-related operations. 
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
-	// Answer is yes!
+	// For safe borrowing we should use _msgSenderForBorrower function, which utilizes controllers to manage the account balance.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
