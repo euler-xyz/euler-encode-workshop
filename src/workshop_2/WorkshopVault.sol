@@ -36,7 +36,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
 	// AccountStatus checks are used to inforce account solvency. For example if account is Zero Address, then it doesn't need account solvency check. In instances such as minting.
     // [ASSIGNMENT]: is the vault status check always necessary? why?
-	// Yes, vault status check is always necessary for situations like supply and borrow cap.
+	// No, vault status check is necessary for situations like supply and borrow cap, but not when there is no change to vault state.
     modifier withChecks(address account) {
         _;
 
@@ -49,7 +49,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
-	// No, _msgSender is overridden so the vault can get the authenticated address from the EVC, not for the sake of borrow-related operations. 
+	// No, _msgSender is overridden so the vault can get the authenticated address from the EVC, but not for the sake of borrow-related operations. 
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
 	// For safe borrowing we should use _msgSenderForBorrower function, which utilizes controllers to manage the account balance.
     function _msgSender() internal view virtual override returns (address) {
