@@ -20,6 +20,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+	// If the caller msg.sender is not EVC, this modifier makes the calls via EVC onbehalf of msg.sender. 
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -33,7 +34,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
+	// AccountStatus checks are used to inforce account solvency. For example if account is Zero Address, then it doesn't need account solvency check. In instances such as minting.
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+	// Yes, vault status check is always necessary for situations like supply and borrow cap.
     modifier withChecks(address account) {
         _;
 
@@ -46,7 +49,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
+	// Yes, _msgSender is overridden so that the valut can get the autenticated address from the EVC
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+	// Answer is yes!
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +63,16 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+	// This function is used to disable controller for an account balance, thus an account can remove certain controls via EVC. 
+	// And it is not safe to unconditionally disable controllers, because it changes the controller storage which is an array(indexing issue).
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+	// Use cases are: 
+	// 1. example usecase are for liquidation, If account requires intervention 
+	// 2. and for borrowing, If account's health is satisfactory
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +86,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+	// 1. To check supply and borrow cap
+	// 2. For external invocation from other contracts to check vault status before interacting with it.
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -84,6 +96,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
+		// We can utilize a snapshot mechanism to capture the initial state of the vault.
 
         return IVault.checkVaultStatus.selector;
     }
