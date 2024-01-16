@@ -63,7 +63,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
-	// This function is used to disable controller for an account balance, thus an account can remove certain controls via EVC. 
+	// This function is used to disable controller for an account balance, thus an account can remove certain controls via EVC only if the debt is fully repaid.
 	// And it is not safe to unconditionally disable controllers, because it changes the controller storage which is an array(indexing issue).
     function disableController() external {
         evc.disableController(_msgSender());
@@ -96,7 +96,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
-		// We can utilize a snapshot mechanism to capture the initial state of the vault.
+		// We can utilize a snapshot mechanism to capture the initial state of the vault and compare it with current state.
 
         return IVault.checkVaultStatus.selector;
     }
