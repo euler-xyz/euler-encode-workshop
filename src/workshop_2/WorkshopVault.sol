@@ -113,7 +113,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // This mechanism allows the system to use the authorization provided by the EVC
     // when the EVC calls functions in the system such as the true msg.sender.
     // In the context of borrowing operations, this can be useful to ensure that borrowing 
-    // is done on behalf of the correct account.
+    // is done on behalf of the correct account. 
 
     // If the answer to the above is "no", how could this function be modified to allow safe borrowing?
 
