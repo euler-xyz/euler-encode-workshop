@@ -20,6 +20,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+    // [ANSWER]: The callThroughEVC modifier is designed to ensure that certain functions can only be called through the evc. 
+    // If the msg.sender is the evc itself, the function proceeds normally. Otherwise, it delegates the call to the evc, which then executes the function. 
+    // This is likely a security or control mechanism to ensure that certain sensitive operations can only be performed through the evc.
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -33,7 +36,11 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
+    // [ANSWER]:The account status check might not be necessary in situations where the operation does not involve specific user accounts, 
+    // such as global configurations or operations that affect the vault as a whole.
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+    // [ANSWER]:The vault status check, on the other hand, is likely always necessary to ensure the overall health and integrity of the vault. 
+    // This is crucial for maintaining trust and security in the system, especially in operations that could affect all users or the vault's stability.
     modifier withChecks(address account) {
         _;
 
@@ -46,7 +53,11 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
+    // [ANSWER]: As it stands, _msgSender() might not be sufficient for secure authentication in borrow-related operations because it can 
+    // return an account on behalf of which the evc is acting. This could be manipulated or misused.
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+    // [ANSWER]: To modify it for safe borrowing, additional checks or a different mechanism to authenticate the real initiator of the transaction should be implemented. 
+    // This could involve verifying signatures or adding more stringent checks to ensure that the account requesting the borrow is indeed the one authorized to do so.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +69,17 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+    // [ANSWER]: This function is necessary to provide a way to disable the controller of the vault, 
+    // which could be a critical action in certain scenarios, such as a security breach or a major operational change.
+    // Unconditionally disabling the controller might not be safe as it could lead to misuse or unintended consequences. It should ideally have safeguards, 
+    // such as requiring multiple confirmations, a time lock, or being callable only under specific conditions.
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // [ANSWER]: This function could be used to assess the health or status of an account, such as checking for solvency, 
+    // compliance with risk parameters, or eligibility for certain operations like borrowing or staking.
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +93,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // [ANSWER]: This function could be used to evaluate the overall health of the vault, like checking liquidity levels, overall risk exposure, or compliance with regulatory requirements.
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -84,7 +102,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
-
+        // [ANSWER]: If the vault status check requires access to the initial state, one approach could be to maintain a historical record or 
+        // snapshot of the vault's state at key points in time. This could involve storing state variables that represent the vault's condition at these moments, allowing the check function to compare current and past states to assess health or changes over time.
         return IVault.checkVaultStatus.selector;
     }
 
