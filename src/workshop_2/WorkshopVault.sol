@@ -93,7 +93,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
-    // [ANSWER]: This function could be used to evaluate the overall health of the vault, like checking liquidity levels, overall risk exposure, or compliance with regulatory requirements.
+    // [ANSWER]: This function could be used to evaluate the overall health of the vault, like checking liquidity levels, overall risk exposure, 
+    // or compliance with regulatory requirements.
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
