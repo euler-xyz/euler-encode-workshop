@@ -20,6 +20,15 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+    // Answer: The purpose of this modifier is to route all the calls throught the EVC.
+               // If EVC is the msg.sender the function execution continues, 
+               // if not then a call to evc is made, which then calls back into this contract
+               // "on behalf of" the msg.sender and executes the required functionality.
+
+               // This is done so because EVC provides the optimal interface and a standardized approach to make account and vault related checks
+               // and also help avoid unexpected reverts due to incorrect execution order of some functions.
+               // Hence it is best to make the calls through the EVC, instead of directly 
+    //  
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -33,7 +42,14 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
+    // Answer: The account status check might not be necessary in situations where 
+            // the action performed does not affect the account's solvency.
+            // It may also not be necessary if the account has not borrowed at all 😉
+
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+    // Answer: It need not always be necessary for example during read-only actions
+    //        However, The vault status check is necessary during state-modifying actions like borrowing,withdrawal, liquidation etc..
+    //        and to enforce any vault-specific constraints like supply cap/borrow cap etc.
     modifier withChecks(address account) {
         _;
 
@@ -46,7 +62,14 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
+
+    //   Answer: No, this function cannot be used to authenticate the account for borrow-related actions.
+
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+
+    // Answer: This function should be modified in a way that it checks whether this vault is enabled as a controller for the account
+    //         on behalf of which the borrow-realted actions are being executed. 
+    //         It should also revert if the vault is not enabled as a controller for the account.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +81,27 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+
+    // Answer : Since, the controller has full control of the account and can act on behalf of the user once the user borrows from the vault
+    // a function like this becomes necessary so that the controller can be disabled once the user returns the borrowed amount for the safety of the user.
+    //          
+    // No, its not safe to unconditionally disable it, if done so the user could get away with the borrowed amount without returning it.
+    // Hence, it becomes important to check the condition that the user does not have any liabilities
+    // and has returned the borrowed amount before calling this function and disabling the controller
+    // Its best to use this function only when required as improper use may lead to unexpected states/results.
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+
+    // Answer: - It can be used to check the validity of the collaterals i.e checking if the collaterals are acceptable by the vault
+    //        
+    //         - It is used to enforce account solvency after any action that may affect an account's liquidity.
+    //         - For example when an account makes an attempt to withdraw collateral, this function can be used 
+    //         - to check whether the withdrawal would still keep the account solvent or not and take appropriate action
+    //         - (such as returning some value if the account remains solvent or reverting if it gets insolvent etc..)
+    //         - It can be used to check for any custom logic required.
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +115,11 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+
+    // Answer : - This function can be used to enforce any constraints that the vaults may have like 
+    //             supply and/or borrow caps which restrict the maximum amount of assests that can be supplied/borrowed.
+
+    //          - This can be also used to evaluate if the vault is in an acceptable state based on some application-specific logic.
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -85,6 +129,11 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
 
+        // Answer: Before executing any action, each operation that needs to perform a vault status check 
+        // should make an appropriate snapshot of the initial data and store it in transient storage
+        // Then the operations can be executed and checkVaultStatus be invoked, it should evaluate the vault status 
+        // by retrieving the snapshot data stored and compare it with the current vault status 
+        // and return the success value or revert if something is violated
         return IVault.checkVaultStatus.selector;
     }
 
