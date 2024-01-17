@@ -20,6 +20,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+    // [ANSWER]: The purpose of this modifier is to ensure that the caller is the EVC. If the caller is not the EVC, it
+    // makes use of the callback functionality to make EVC call the functions in this vault.
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -33,7 +35,13 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
+    // [ANSWER]: If the account has not taken up any liability, there is no need to ensure health / solvency of the
+    // account. If the account only supplies assets as collateral (for yield) and not taking out any debt, there is no
+    // need to check as the account would never be in violation.
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+    // [ANSWER]: Vault status checks are not always necessary, if there is no business logic to be enforced on the
+    // vault. For example, if the vault does not have a supply / borrow limit there is nothing to check for the vault
+    // itself.
     modifier withChecks(address account) {
         _;
 
@@ -46,7 +54,10 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
+    // [ANSWER]: No
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+    // [ANSWER]: We need to check if this vault is enabled as a controller of that particular account
+    // before allowing borrow-related operations.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +69,21 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+    // [ANSWER]: It's necessary so that the account can be released from this controller and be under the control of
+    // another controller in the future. In the EVC, each account can only have at most one controller at any point
+    // in time. Without this function, an account will permanently be under the control of a certain controller, which
+    // in malicious cases, could pose risks of asset loss.
+    // It's not safe to unconditionally disable the controller. The controller should check that the account has no more
+    // outstanding liabilities before allowing it to be disabled.
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // [ANSWER]: A use case could be to check if the liabilities exceed the collateral (health of the account).
+    // Another use case could be to see if the account is blacklisted, in the case of a permissioned vault.
+    // Yet another use case could be to check if an account is using a collateral that was recently de-listed (was
+    // previously eligible to be used as collateral but has been disallowed since).
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +97,10 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // [ANSWER]:
+    // 1. To update the interest rate
+    // 2. To check if the supply cap is exceeded
+    // 3. To check if the borrow cap is exceeded
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -84,6 +109,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
+        // [ANSWER]: We can take a snapshot at the beginning of the transaction, and place it in memory instead of
+        // storage for gas savings. Then reference the snapshot in this function to perform calculations against the
+        // current state.
 
         return IVault.checkVaultStatus.selector;
     }
