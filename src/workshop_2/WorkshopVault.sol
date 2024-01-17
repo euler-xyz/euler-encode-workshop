@@ -20,6 +20,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+    // Answer: The `callThroughEVC` modifier allows specific calls only from the designated `evc` (Ethereum Vault Connector).
+    // If the sender is the `evc`, the function executes as normal. Otherwise, it attempts to forward the call to the `evc` contract.
+
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -34,6 +37,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+    // Answer: The account status check might not be necessary when the operation involves the entire vault (e.g., address(0)).
+    // The vault status check is not always necessary; it depends on the context. For account-specific operations, the account status check may be sufficient without the need for a vault status check.
+
     modifier withChecks(address account) {
         _;
 
@@ -47,6 +53,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+    // Answer: No, the `_msgSender` function, as currently implemented, does not authenticate the account for borrow-related operations.
+    // To enable safe borrowing, it could be modified to perform additional checks specific to borrow-related operations.
+
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +67,17 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+    // Answer: The `disableController` function is necessary to allow the `evc` to disable the vault controller.
+    // Whether it is safe to unconditionally disable the controller depends on specific requirements and system design.
+
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // Answer: The `checkAccountStatus` function is used by the `evc` to perform custom logic for evaluating the health of a user account.
+    // Use cases could include checking the balance, collateralization ratio, or other parameters relevant to the specific requirements of the application.
+
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,14 +91,15 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // Answer: The `checkVaultStatus` function is used by the `evc` to perform custom logic for evaluating the health of the entire vault.
+    // Use cases might include checking the total assets held, outstanding liabilities, or other factors affecting the overall health of the vault.
+    // If the vault status check needs access to the initial state, the contract design may require storing the initial state during deployment or providing a method in the `evc` to retrieve it.
+
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
 
         // some custom logic evaluating the vault health
-
-        // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
-        // order to evaluate the vault health?
 
         return IVault.checkVaultStatus.selector;
     }
