@@ -50,6 +50,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // Answer: It need not always be necessary for example during read-only actions
     //        However, The vault status check is necessary during state-modifying actions like borrowing,withdrawal, liquidation etc..
     //        and to enforce any vault-specific constraints like supply cap/borrow cap etc.
+    //        And also to check/execute and custom logic.
     modifier withChecks(address account) {
         _;
 
