@@ -3,7 +3,7 @@
 1. How many sub-accounts does an Ethereum address have on the EVC? How are their addresses calculated?
 
 Answer: An ethereum address has 256 sub-accounts on the EVC, which are fully isolated from each other.
-The sub-account addresses ared created by XORing the owning address with sub-account-ID.
+The sub-account addresses are created by XORing the owning address with sub-account-ID.
 
 1. Does the sub-account system decrease the security of user accounts?
 
