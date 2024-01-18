@@ -2,6 +2,7 @@
 
 1. How many sub-accounts does an Ethereum address have on the EVC? How are their addresses calculated?
 
+
 Answer: An ethereum address has 256 sub-accounts on the EVC, which are fully isolated from each other.
 The sub-account addresses are created by XORing the owning address with sub-account-ID.
 
@@ -40,9 +41,9 @@ Answer:
 - It supports both EOAs with EIP-712 and smart contract wallets with ERC-1271 as keepers.
 
 1. What is the purpose of the nonce namespace?
+   Answer: The purpose of nonce namespace is to allow separate streams of execution of orders. This allows users to optionally relax the sequencing restrictions and provides them some flexibility in how they wish to order the sequence of transactions.
 
-Answer: The purpose of nonce namespace is to allow separate streams of execution of orders. This allows users to optionally relax the sequencing restrictions and provides them some flexibility in how they wish to order the sequence of transactions.
 
 1. Why should the EVC neither be given any privileges nor hold any tokens?
+   Answer: Beacuse the EVC contract can be made to invoke any arbitrary target contract with any arbitrary calldata.
 
-Answer: Beacuse the EVC contract can be made to invoke any arbitrary target contract with any arbitrary calldata.
