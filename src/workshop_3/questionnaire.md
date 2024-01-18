@@ -64,5 +64,4 @@ Answer: It's a way to segment streams of execution orders. From the presentation
 
 ```
 Answer: The EVC should not be given any privileges or hold any tokens due to the risks associated with its ability to execute arbitrary calldata, the control exerted by the Controller Vault, and the diverse nature of assets that can be used as collateral within the protocol.
-
 ```
