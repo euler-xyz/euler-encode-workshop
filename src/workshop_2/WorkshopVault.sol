@@ -38,7 +38,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
     // Answer: The account status check might not be necessary when the operation involves the entire vault (e.g., address(0)).
     // [ASSIGNMENT]: is the vault status check always necessary? why?
-    // The vault status check is not always necessary; it depends on the context. For account-specific operations, the account status check may be sufficient without the need for a vault status check.
+    // Answer: The vault status check is not always necessary; it depends on the context. For account-specific operations, the account status check may be sufficient without the need for a vault status check.
 
     modifier withChecks(address account) {
         _;
@@ -52,9 +52,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
-    // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
     // Answer: No, the `_msgSender` function, as currently implemented, does not authenticate the account for borrow-related operations.
-    // To enable safe borrowing, it could be modified to perform additional checks specific to borrow-related operations.
+    // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+    // Answer: To enable safe borrowing, it could be modified to perform additional checks specific to borrow-related operations.
 
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
