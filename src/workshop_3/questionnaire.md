@@ -14,7 +14,7 @@
    * In the case of an operator, an account owner can grant or revoke access at any time, while the Controller exclusively retains the authorization to revoke its privileges on the account.
    * An account operator can change the collateral or controller sets while the Controller has no permission to do.
 1. What does it mean to defer the account and vault status checks? What is the purpose of this deferral?
-   * Deferring account/vault status checks delay the verification/check of the status of the account and vault until a later time or under specific conditions.
+   * Deferring account/vault status checks delay the verification/check of the status of the account and vault until a later time or under certain conditions.
      ## Purpose:
    * In the case of batching, multiple call operations can be performed within a single batch operation by deferring the liquidity checks until the end of the batch.
      
