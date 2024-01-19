@@ -39,7 +39,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // [ASSIGNMENT]: is the vault status check always necessary? Yes 
     // why? The vault status check is always necessary when performing operations that could 
     // affect the vaults state. It ensures that the vault is in a valid state before the operation is performed.
-    modifier withChecks(address account) {
+    modifier withChecks(address account) { 
         _;
 
         if (account == address(0)) {
