@@ -7,12 +7,14 @@ import "evc/interfaces/IEthereumVaultConnector.sol";
 import "evc/interfaces/IVault.sol";
 import "./IWorkshopVault.sol";
 import {Math} from "../../openzeppelin/utils/math/Math.sol";
-import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
 import {console} from "../../lib/forge-std/src/console.sol";
 
-contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
+//import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
+
+contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     //error
     error unAbleToBorrow();
+    error stillOwing();
     using Math for uint;
 
     //Storage variable
@@ -26,7 +28,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
 
     IEVC internal immutable evc;
     IERC20 assetToBorrow;
-    uint collateralFactor = 80;
 
     constructor(
         IEVC _evc,
@@ -56,8 +57,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         }
     }
 
-    // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
-    // [ASSIGNMENT]: is the vault status check always necessary? why?
     modifier withChecks(address account) {
         //take the snapshot of the vault/account
 
@@ -98,12 +97,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         override
         returns (uint256)
     {
-        return
-            shares.mulDiv(
-                totalAssets() + totalBorrowedAssets +1,
-                totalSupply() + 10**_decimalsOffset(),
-                Math.Rounding.Floor
-            );
+        return shares;
     }
 
     function maxWithdraw(address owner)
@@ -113,21 +107,26 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         override
         returns (uint256)
     {
-        uint256 totAssets = totalAssets();
+        uint256 currentTotalAssets = totalAssets();
         uint256 ownerAssets = convertToAssets(
-            balanceOfShares[owner] 
+            balanceOfShares[owner] - accountAccruedDebt[owner]
         );
 
-        return ownerAssets > totAssets ? totAssets : ownerAssets;
+        if (ownerAssets > currentTotalAssets) {
+            return currentTotalAssets;
+        } else {
+            return ownerAssets;
+        }
     }
 
-    // IVault
-    // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
     function disableController() external {
-        evc.disableController(_msgSender());
+        if (accountAccruedDebt[_msgSender()] > 0) {
+            revert stillOwing();
+        } else {
+            evc.disableController(_msgSender());
+        }
     }
 
-    // [ASSIGNMENT]: provide a couple use cases for this function
     function checkAccountStatus(address account, address[] calldata collaterals)
         public
         virtual
@@ -149,7 +148,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         //Therefore, loan_value > debt ? accountHealthy: accountUnHealthyStatus;
 
         /////////////////////////////////////HARDCODED/////////////////////////////
-        require(accountDebt < type(uint64).max, "unhealthy account");
+        require(accountDebt < type(uint64).max, "unhealthy Account");
 
         return IVault.checkAccountStatus.selector;
     }
@@ -194,13 +193,15 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
     {
         assetToBorrow.transferFrom(_msgSender(), address(this), assets);
         _totalAssets += assets;
-        (shares) = _convertToShares(assets, Math.Rounding.Floor);
+        shares = _convertToShares(assets, Math.Rounding.Floor);
         balanceOfShares[_msgSender()] += shares;
 
-        console.log(_msgSender());
-
-        //@audit evc is calling error
-        mint(shares, receiver);
+        evc.call(
+            address(this),
+            _msgSender(),
+            0,
+            abi.encodeWithSelector(this.mint.selector, shares, _msgSender())
+        );
     }
 
     function totalAssets() public view virtual override returns (uint256) {
@@ -214,7 +215,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         withChecks(address(_msgSender()))
         returns (uint256 assets)
     {
-        console.log(msg.sender);
         _mint(receiver, shares);
     }
 
@@ -259,27 +259,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         return super.transfer(to, value);
     }
 
-    // function transferFrom(
-    //     address from,
-    //     address to,
-    //     uint256 amount
-    // )
-    //     public
-    //     virtual
-    //     override(ERC20, IERC20)
-
-    //     returns (bool)
-    // {
-    //     super.transferFrom(from,to,amount);
-    // }
-
-    //override maxWithdraw
-    //  function maxWithdraw(address owner) public view virtual override returns (uint256) {
-    //     uint256 totAssets = totalAssets();
-    //     uint256 ownerAssets = _convertToAssets(balanceOf[owner], false);
-
-    //     return ownerAssets > totAssets ? totAssets : ownerAssets;
-    // }
     function _convertToAssets(uint256 shares, Math.Rounding rounding)
         internal
         view
@@ -287,14 +266,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         override
         returns (uint256)
     {
-        return shares.mulDiv(
-            totalAssets() + totalBorrowedAssets + 1,
-            totalSupply() + 10**_decimalsOffset(),
-            rounding
-        );
+        return shares;
     }
 
-    //     /// @dev This function is overridden to take into account the fact that some of the assets may be borrowed.
     function _convertToShares(uint256 assets, Math.Rounding rounding)
         internal
         view
@@ -303,11 +277,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         returns (uint256)
     {
         return assets;
-        // assets.mulDiv(
-        //     totalSupply() + 10**_decimalsOffset(),
-        //     totalAssets() + totalBorrowedAssets + 1,
-        //     rounding
-        // );
     }
 
     // IWorkshopVault
@@ -322,12 +291,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         }
         require(assets != 0, "asset cannot be zero");
 
-        ////////////////////////UPDATE VAULT STATES
-
-        //check the vault status if it is healthy and take the snapshot
-
-        //emit event after
-
+        ///UPDATE STATES
         accountAccruedDebt[_msgSender()] += assets;
         totalBorrowedAssets += assets;
 
@@ -335,9 +299,85 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         assetToBorrow.transfer(receiver, assets);
     }
 
-    function repay(uint256 assets, address receiver) external {}
+    function maxRedeem(address owner)
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
+        uint256 totalCurrentAssets = totalAssets();
+        uint256 ownerShares = this.balanceOf(owner) - accountAccruedDebt[owner];
 
-    function pullDebt(address from, uint256 assets) external returns (bool) {}
+        return
+            _convertToAssets(ownerShares, Math.Rounding.Floor) >
+                totalCurrentAssets
+                ? _convertToShares(totalCurrentAssets, Math.Rounding.Floor)
+                : ownerShares;
+    }
 
-    function liquidate(address violator, address collateral) external {}
+    function repay(uint256 assets, address receiver)
+        external
+        callThroughEVC
+        withChecks(_msgSender())
+    {
+        if (!evc.isControllerEnabled(receiver, address(this))) {
+            revert("is Disabled");
+        }
+
+        require(assets != 0, "NO ASSET VALUE");
+        accountAccruedDebt[receiver] -= assets;
+
+        totalBorrowedAssets -= assets;
+
+        assetToBorrow.transferFrom(_msgSender(), address(this), assets);
+    }
+
+    function pullDebt(address from, uint256 assets)
+        external
+        callThroughEVC
+        withChecks(_msgSender())
+        returns (bool)
+    {
+        //ensure the address calling is under the control of EVC
+        if (!evc.isControllerEnabled(_msgSender(), address(this))) {
+            revert("is Disabled");
+        }
+        require(assets != 0, "");
+        require(_msgSender() != from, "");
+        accountAccruedDebt[from] -= assets;
+        accountAccruedDebt[_msgSender()] += assets;
+        return true;
+    }
+
+    function liquidate(address violator, address collateral)
+        external
+        callThroughEVC
+        withChecks(_msgSender())
+    {
+        //@audit for now,  the vault needs to pay the debt, huh? bad business lol
+        uint assetDebt = accountAccruedDebt[violator];
+
+        //get the value of the asset using pricefeed during full implementation
+
+        //get the collateral
+        uint collateralValue = ERC4626(collateral).balanceOf(violator);
+        if (assetDebt > collateralValue) {
+            bytes memory result = evc.controlCollateral(
+                address(this),
+                violator,
+                0,
+                abi.encodeCall(this.transfer, (address(this), collateralValue))
+            );
+
+            //decode the bytes result
+            bool success = abi.decode(result, (bool));
+            if (success) {
+                accountAccruedDebt[address(this)] += (assetDebt -
+                    collateralValue);
+                ///bad debt <sad>
+                evc.forgiveAccountStatusCheck(violator);
+            }
+        }
+    }
 }

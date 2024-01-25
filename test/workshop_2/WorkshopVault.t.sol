@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+//SPDX-License-Identifier: GPL-2.0-or-later
 
 pragma solidity ^0.8.19;
 
@@ -8,47 +8,47 @@ import "evc/EthereumVaultConnector.sol";
 import "../../src/workshop_2/WorkshopVault.sol";
 import {console} from "../../lib/forge-std/src/console.sol";
 
-// contract TestVault is WorkshopVault {
-//     bool internal shouldRunOriginalAccountStatusCheck;
-//     bool internal shouldRunOriginalVaultStatusCheck;
+contract TestVault is WorkshopVault {
+    bool internal shouldRunOriginalAccountStatusCheck;
+    bool internal shouldRunOriginalVaultStatusCheck;
 
-//     constructor(
-//         IEVC _evc,
-//         IERC20 _asset,
-//         string memory _name,
-//         string memory _symbol
-//     ) WorkshopVault(_evc, _asset, _name, _symbol) {}
+    constructor(
+        IEVC _evc,
+        IERC20 _asset,
+        string memory _name,
+        string memory _symbol
+    ) WorkshopVault(_evc, _asset, _name, _symbol) {}
 
-//     function setShouldRunOriginalAccountStatusCheck(
-//         bool _shouldRunOriginalAccountStatusCheck
-//     ) external {
-//         shouldRunOriginalAccountStatusCheck = _shouldRunOriginalAccountStatusCheck;
-//     }
+    function setShouldRunOriginalAccountStatusCheck(
+        bool _shouldRunOriginalAccountStatusCheck
+    ) external {
+        shouldRunOriginalAccountStatusCheck = _shouldRunOriginalAccountStatusCheck;
+    }
 
-//     function setShouldRunOriginalVaultStatusCheck(
-//         bool _shouldRunOriginalVaultStatusCheck
-//     ) external {
-//         shouldRunOriginalVaultStatusCheck = _shouldRunOriginalVaultStatusCheck;
-//     }
+    function setShouldRunOriginalVaultStatusCheck(
+        bool _shouldRunOriginalVaultStatusCheck
+    ) external {
+        shouldRunOriginalVaultStatusCheck = _shouldRunOriginalVaultStatusCheck;
+    }
 
-//     function checkAccountStatus(address account, address[] calldata collaterals)
-//         public
-//         override
-//         returns (bytes4 magicValue)
-//     {
-//         return
-//             !shouldRunOriginalAccountStatusCheck
-//                 ? super.checkAccountStatus(account, collaterals)
-//                 : this.checkAccountStatus.selector;
-//     }
+    function checkAccountStatus(address account, address[] calldata collaterals)
+        public
+        override
+        returns (bytes4 magicValue)
+    {
+        return
+            !shouldRunOriginalAccountStatusCheck
+                ? super.checkAccountStatus(account, collaterals)
+                : this.checkAccountStatus.selector;
+    }
 
-//     function checkVaultStatus() public override returns (bytes4 magicValue) {
-//         return
-//             shouldRunOriginalVaultStatusCheck
-//                 ? super.checkVaultStatus()
-//                 : this.checkVaultStatus.selector;
-//     }
-// }
+    function checkVaultStatus() public override returns (bytes4 magicValue) {
+        return
+            shouldRunOriginalVaultStatusCheck
+                ? super.checkVaultStatus()
+                : this.checkVaultStatus.selector;
+    }
+}
 
 contract VaultTest is ERC4626Test {
     IEVC _evc_;
@@ -176,62 +176,62 @@ contract VaultTest is ERC4626Test {
 
         // // verify maxWithdraw and maxRedeem functions
         assertEq(vault.maxWithdraw(alice), amount - amountToBorrow);
-        // assertEq(vault.convertToAssets(vault.maxRedeem(alice)), amount - amountToBorrow);
+        assertEq(vault.convertToAssets(vault.maxRedeem(alice)), amount - amountToBorrow);
 
         // // verify conversion functions
-        // assertEq(vault.convertToShares(amount), vault.balanceOf(alice));
-        // assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
+         assertEq(vault.convertToShares(amount), vault.balanceOf(alice));
+         assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
 
         // // alice tries to disable controller, it should fail due to outstanding debt
-        // vm.prank(alice);
-        // vm.expectRevert();
-        // vault.disableController();
+        vm.prank(alice);
+        vm.expectRevert();
+        vault.disableController();
 
         // // bob tries to pull some debt from alice's account, it should fail due to disabled controller
-        // vm.prank(bob);
-        // vm.expectRevert();
-        // vault.pullDebt(alice, amountToBorrow / 2);
+        vm.prank(bob);
+        vm.expectRevert();
+        vault.pullDebt(alice, amountToBorrow / 2);
 
         // // bob enables controller
-        // vm.prank(bob);
-        // _evc_.enableController(bob, address(vault));
+        vm.prank(bob);
+        _evc_.enableController(bob, address(vault));
 
         // // bob tries again to pull some debt from alice's account, it should succeed now
-        // vm.prank(bob);
-        // vault.pullDebt(alice, amountToBorrow / 2);
+        vm.prank(bob);
+        vault.pullDebt(alice, amountToBorrow / 2);
 
         // // charlie repays part of alice's debt using her assets
-        // vm.prank(charlie);
-        // _evc_.call(
-        //     address(vault),
-        //     alice,
-        //     0,
-        //     abi.encodeWithSelector(WorkshopVault.repay.selector, amountToBorrow - amountToBorrow / 2, alice)
-        // );
+        vm.prank(charlie);
+        _evc_.call(
+            address(vault),
+            alice,
+            0,
+            abi.encodeWithSelector(WorkshopVault.repay.selector, amountToBorrow - amountToBorrow / 2, alice)
+        );
 
         // // verify alice's balance
-        // assertEq(underlying.balanceOf(alice), amountToBorrow / 2);
-        // assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
+        assertEq(underlying.balanceOf(alice), amountToBorrow / 2);
+        assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
 
         // // alice can disable the controller now
-        // vm.prank(alice);
-        // vault.disableController();
+        vm.prank(alice);
+        vault.disableController();
 
         // // bob tries to disable the controller, it should fail due to outstanding debt
-        // vm.prank(bob);
-        // vm.expectRevert();
-        // vault.disableController();
+        vm.prank(bob);
+        vm.expectRevert();
+        vault.disableController();
 
         // // alice repays bob's debt
-        // vm.prank(alice);
-        // vault.repay(amountToBorrow / 2, bob);
+        vm.prank(alice);
+        vault.repay(amountToBorrow / 2, bob);
 
         // // verify bob's balance
-        // assertEq(underlying.balanceOf(bob), 0);
+        assertEq(underlying.balanceOf(bob), 0);
 
         // // bob can disable the controller now
-        // vm.prank(bob);
-        // vault.disableController();
+         vm.prank(bob);
+         vault.disableController();
     }
 
     function test_assigment_InterestAccrual(address alice, uint64 amount)
