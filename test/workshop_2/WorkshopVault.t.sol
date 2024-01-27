@@ -7,6 +7,7 @@ import "openzeppelin/mocks/token/ERC20Mock.sol";
 import "evc/EthereumVaultConnector.sol";
 import "../../src/workshop_2/WorkshopVault.sol";
 import {console} from "../../lib/forge-std/src/console.sol";
+import "openzeppelin/token/ERC20/extensions/ERC4626.sol";
 
 contract TestVault is WorkshopVault {
     bool internal shouldRunOriginalAccountStatusCheck;
@@ -62,6 +63,7 @@ contract VaultTest is ERC4626Test {
         _vault_ = address(
             new WorkshopVault(_evc_, IERC20(_underlying_), "Vault", "VLT")
         );
+
     }
 
     function test_DepositWithEVC(address alice, uint64 amount) public {
@@ -74,6 +76,7 @@ contract VaultTest is ERC4626Test {
 
         ERC20 underlying = ERC20(_underlying_);
         WorkshopVault vault = WorkshopVault(_vault_);
+       
 
         // mint some assets to alice
         ERC20Mock(_underlying_).mint(alice, amount);
@@ -128,6 +131,7 @@ contract VaultTest is ERC4626Test {
         uint256 amountToBorrow = amount / 2;
         ERC20 underlying = ERC20(_underlying_);
         WorkshopVault vault = WorkshopVault(_vault_);
+    
 
         // mint some assets to alice
         ERC20Mock(_underlying_).mint(alice, amount);
@@ -135,13 +139,11 @@ contract VaultTest is ERC4626Test {
         // make charlie an operator of alice's account
         vm.prank(alice);
         _evc_.setAccountOperator(alice, charlie, true);
-
+       
         // alice approves the vault to spend her assets
         vm.prank(alice);
         underlying.approve(address(vault), type(uint256).max);
-        //address simulatedCollateral = makeAddr("collateralVault");
-        //   _evc_.enableCollateral(alice,simulatedCollateral);
-
+       
         // charlie deposits assets on alice's behalf
         vm.prank(charlie);
         _evc_.call(
@@ -150,8 +152,9 @@ contract VaultTest is ERC4626Test {
             0,
             abi.encodeWithSelector(IERC4626.deposit.selector, amount, alice)
         );
-        //   vm.deal(address(vault),1 ether);
-        // console.log(underlying.balanceOf(address(vault)));
+      
+
+     
         // verify alice's balance
         assertEq(underlying.balanceOf(alice), 0);
         assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
@@ -164,6 +167,7 @@ contract VaultTest is ERC4626Test {
         // // alice enables controller
         vm.prank(alice);
         _evc_.enableController(alice, address(vault));
+
 
         // // alice tries to borrow again, now it should succeed
         vm.prank(alice);

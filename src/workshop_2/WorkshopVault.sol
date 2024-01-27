@@ -8,26 +8,44 @@ import "evc/interfaces/IVault.sol";
 import "./IWorkshopVault.sol";
 import {Math} from "../../openzeppelin/utils/math/Math.sol";
 import {console} from "../../lib/forge-std/src/console.sol";
+import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
 
-//import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
+///////////////////FOR SIMPLICITY, THIS VAULT ONLY SUPPORT LENDING AND BORROWING////////////////////////////////
+///////////////////OF USDT. THIS IS THE BASE ASSET OF THIS VAULT>>>>>>>>>>>>>>>>///////////////////////////////
+//1. LENDING THE BASE ASSET (USDT)
+//2. SUPPLYING COLLATERAL(IN USDT VALUE/ ETH TO BE CONVERTED TO USDT BY THE VAULT ORACLE) AND BORROWING THE BASE ASSET (USDT)
+//3. LIQUIDATING UNDER-COLLATERIZED LOAN
+//4. DEPOSIT USDT AND BE AWARDED THE VAULT TOKEN AS SHARES WITH INTEREST ACCRUAL ON YOUR SHARES OVER TIME.
 
-contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
+//reserve factor” — a percentage of capital supplied by lenders that they do not receive interest on.
+// The interest from this capital instead goes to the protocol
+
+//UTILIZATION = BORROWED/TOTAL DEPOSIT
+//SUPPLY INTEREST RATE = BORROW INTEREST RATE * UTILIZATION * (1 - RESERVE FACTOR)
+//OPTIMAL UTILIZATION = 80% - 95%
+//COLLATERAL_FACTOR = LOAN VALUE/ COLLATERAL_VALUE
+//@Note The loan to value is the current value of the loan as a percentage of the collateral value
+//liquidation factor — a threshold percentage at which the collateral can be forcibly taken from the borrower.
+
+contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
     //error
     error unAbleToBorrow();
     error stillOwing();
+
     using Math for uint;
+    IEVC internal immutable evc;
+    IERC20 assetToBorrow;
 
     //Storage variable
     uint256 public s_totalAmountBorrowedFromVault;
     bytes private takeSnapshot;
     uint public totalBorrowedAssets;
     uint internal _totalAssets;
+    uint internal interestTimeStamp;
+    uint internal interestRate;
 
     mapping(address => uint256) public accountAccruedDebt;
     mapping(address => uint256) public balanceOfShares;
-
-    IEVC internal immutable evc;
-    IERC20 assetToBorrow;
 
     constructor(
         IEVC _evc,
@@ -37,6 +55,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     ) ERC4626(_asset) ERC20(_name, _symbol) {
         evc = _evc;
         assetToBorrow = _asset;
+        interestTimeStamp = block.timestamp;
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
@@ -76,18 +95,17 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
-    // operations? why?
-    // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
-    function _msgSender() internal view virtual override returns (address) {
-        if (msg.sender == address(evc)) {
-            (address onBehalfOfAccount, ) = evc.getCurrentOnBehalfOfAccount(
-                address(0)
-            );
-            return onBehalfOfAccount;
-        } else {
-            return msg.sender;
+    function _calculateBorrowInterest() internal returns (bool) {
+        ///UTILIZATION DETERMINES BORROW INTEREST RATES
+        ///UTILIZATION = BORROWED/TOTAL Deposits
+        ///let's get the current utilization
+        //@audit not a production maths
+        if (block.timestamp - interestTimeStamp > 0) {
+            //hardcode interest rate
+            return true;
         }
+        interestTimeStamp = block.timestamp;
+        return false;
     }
 
     function convertToAssets(uint256 shares)
@@ -119,7 +137,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    function disableController() external {
+    function disableController() external nonReentrant {
         if (accountAccruedDebt[_msgSender()] > 0) {
             revert stillOwing();
         } else {
@@ -137,7 +155,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
             evc.areChecksInProgress(),
             "can only be called when checks in progress"
         );
-        //do you have an outstanding debt
+        //do you have an outstanding debt?
         uint accountDebt = accountAccruedDebt[account];
 
         //logic to check if the account is healthy
@@ -146,9 +164,23 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         //loan value= collateral_factor * collateral_value
         //Therefore, loan_value > debt ? accountHealthy: accountUnHealthyStatus;
+        // if (accountDebt > 0) {
+        //     (
+        //         ,
+        //         uint256 liabilityValue,
+        //         uint256 collateralValue
+        //     ) = _calculateLiabilityAndCollateral(account, collaterals);
+        //  ERC4626 collateral = ERC4626(collaterals[0]);
+        //uint256 collateralShares = collateral.balanceOf(account);
+        //  console.log(collateralShares);
+
+        //     if (liabilityValue > collateralValue) {
+        //         revert AccountUnhealthy();
+        //     }
+        // }
 
         /////////////////////////////////////HARDCODED/////////////////////////////
-        require(accountDebt < type(uint64).max, "unhealthy Account");
+        require(accountDebt < type(uint104).max, "unhealthy Account");
 
         return IVault.checkAccountStatus.selector;
     }
@@ -189,12 +221,13 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         override
         callThroughEVC
         withChecks(address(0))
+        nonReentrant
         returns (uint256 shares)
     {
         assetToBorrow.transferFrom(_msgSender(), address(this), assets);
         _totalAssets += assets;
         shares = _convertToShares(assets, Math.Rounding.Floor);
-        balanceOfShares[_msgSender()] += shares;
+        balanceOfShares[receiver] += shares;
 
         evc.call(
             address(this),
@@ -202,6 +235,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
             0,
             abi.encodeWithSelector(this.mint.selector, shares, _msgSender())
         );
+        ///  mint(shares, receiver);
     }
 
     function totalAssets() public view virtual override returns (uint256) {
@@ -212,7 +246,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         public
         virtual
         override
-        withChecks(address(_msgSender()))
+        withChecks(address(0))
         returns (uint256 assets)
     {
         _mint(receiver, shares);
@@ -283,7 +317,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     function borrow(uint256 assets, address receiver)
         external
         callThroughEVC
-        withChecks(_msgSender())
+        withChecks(_msgSenderBorrower())
+        nonReentrant
     {
         //////////////////////CHECKS
         if (!evc.isControllerEnabled(_msgSender(), address(this))) {
@@ -318,14 +353,17 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     function repay(uint256 assets, address receiver)
         external
-        callThroughEVC
-        withChecks(_msgSender())
+        withChecks(address(0))
+        nonReentrant
     {
         if (!evc.isControllerEnabled(receiver, address(this))) {
             revert("is Disabled");
         }
-
+        //BORROW INTEREST ACCRUED
         require(assets != 0, "NO ASSET VALUE");
+        if (_calculateBorrowInterest()) {
+            accountAccruedDebt[receiver] += 1;
+        }
         accountAccruedDebt[receiver] -= assets;
 
         totalBorrowedAssets -= assets;
@@ -337,6 +375,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         external
         callThroughEVC
         withChecks(_msgSender())
+        nonReentrant
         returns (bool)
     {
         //ensure the address calling is under the control of EVC
@@ -354,6 +393,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         external
         callThroughEVC
         withChecks(_msgSender())
+        nonReentrant
     {
         //@audit for now,  the vault needs to pay the debt, huh? bad business lol
         uint assetDebt = accountAccruedDebt[violator];
@@ -379,5 +419,45 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
                 evc.forgiveAccountStatusCheck(violator);
             }
         }
+    }
+
+    function _msgSender() internal view virtual override returns (address) {
+        if (msg.sender == address(evc)) {
+            (address onBehalfOfAccount, ) = evc.getCurrentOnBehalfOfAccount(
+                address(this)
+            );
+            return onBehalfOfAccount;
+        } else {
+            return msg.sender;
+        }
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    )
+        public
+        virtual
+        override(ERC20, IERC20)
+        callThroughEVC
+        withChecks(from)
+        returns (bool)
+    {
+        return super.transferFrom(from, to, value);
+    }
+
+    function _msgSenderBorrower() internal view virtual returns (address) {
+        bool enabled;
+        if (msg.sender == address(evc)) {
+            (address onBehalfOfAccount, ) = evc.getCurrentOnBehalfOfAccount(
+                address(0)
+            );
+            return onBehalfOfAccount;
+        } else {
+            enabled = evc.isControllerEnabled(msg.sender, address(this));
+            require(enabled, "controller disabled");
+        }
+        return msg.sender;
     }
 }
