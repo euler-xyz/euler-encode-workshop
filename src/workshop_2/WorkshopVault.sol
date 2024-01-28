@@ -20,6 +20,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+//  This modifier ensures that certain functions can only be called directly by the EVC. If called by any other entity, the function is redirected to the EVC, allowing the vault to operate under the assumption that specific checks are always deferred to the External Vault Contract. This will take care of routing the calls through the EVC, and the vault can operate under the assumption that the checks are always deferred.
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -33,7 +34,12 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
+If an account has not borrowed anything from the vault, there may be no need to perform an account status check.If the collateral provided by an account is considered low-risk,
+and the vault has a high tolerance for that particular type of collateral, the vault may decide to skip account status checks for such accounts in a optimised way.
+
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+NO:vault status checks can be deferred based on the current execution context. This flexibility is useful for optimizing performance and scheduling checks when necessary.And for the 
+the use of re-entrancy guards and the potential need for the call function to avoid re-entry issues when calling back into the vault's checkVaultStatus function.
     modifier withChecks(address account) {
         _;
 
@@ -46,7 +52,12 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
+this _msgSender function is designed to return the account address for the purpose of identifying the entity making the call.
+No, for borrow-related users must be checked if the users account has any borrowcaps,also this msgsender its just for sake of the evc to take action onbehalfofaccount
+
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+For safe borrowing must check the initial snapshot of the vault state before any operations have been performed.Must the borrowed assests below the vaule of Collateral.
+
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +69,15 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+Users account have limited actions on Controller, can only disableController when he can repay his debts back to the vault.Only the controller itself can call disableController on the EVC.No the EVC can't call the 
+disableController without any reason, if any users is in debt, it shouldnt call this function under any circumstances.
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+The vault will evaluate application-specific logic to determine whether or not the account is in an acceptable state.It checks the EVC call, accounts health to enable the collateral vaults.
+It return a special magic success value
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +91,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+Vault checks ensures that maximum amount of assets that can be supplied or borrowed, as a risk minimisation. It takes a initial snapshot of the vault state before any operations have been performed.
+Vaults must expose an external checkVaultStatus function. 
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -84,7 +101,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
-
+To take snapshot evaluate the vault status by unpacking the snapshot data stored in transient storage and compare it against the current state of the vault. So taking snapshot is important to consider initial vault state.
         return IVault.checkVaultStatus.selector;
     }
 
