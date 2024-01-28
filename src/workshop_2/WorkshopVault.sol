@@ -20,6 +20,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier? This modifier ensures that specific functions can only be called by the EVC contract. It verifies the sender's address against the EVC address before allowing the function execution. This prevents unauthorized access and maintains control over sensitive operations managed by the EVC.
+
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
