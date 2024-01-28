@@ -4,53 +4,53 @@ pragma solidity ^0.8.19;
 
 import "evc/interfaces/IVault.sol";
 
-contract IWorkshopVault is IVault {
-    mapping(address => uint256) private balances;
-    mapping(address => uint256) private debts;
-    uint256 private totalAssets;
-    uint256 private totalShares;
-    bool private controllerEnabled = true;
-    address private lastBorrower;
+contract WorkshopVault is IVault {
+    mapping(address => uint256) private userBalances;
+    mapping(address => uint256) private userDebts;
+    uint256 private totalAvailableAssets;
+    uint256 private totalAvailableShares;
+    bool private isControllerActive = true;
+    address private lastBorrowingUser;
 
-    function borrow(uint256 assets, address receiver) external override {
-        require(controllerEnabled, "Controller is disabled");
-        require(totalAssets >= assets, "Not enough assets in the contract");
-        totalAssets -= assets;
-        debts[receiver] += assets;
-        lastBorrower = receiver;
+    function borrow(uint256 requestedAssets, address borrower) external override {
+        require(isControllerActive, "Controller is disabled");
+        require(totalAvailableAssets >= requestedAssets, "Insufficient assets in the system");
+        totalAvailableAssets -= requestedAssets;
+        userDebts[borrower] += requestedAssets;
+        lastBorrowingUser = borrower;
     }
 
-    function repay(uint256 assets, address receiver) external override {
-        require(controllerEnabled, "Controller is disabled");
-        require(debts[receiver] >= assets, "Not enough debt to repay");
-        require(balances[receiver] >= assets, "Not enough balance to repay");
-        totalAssets += assets;
-        debts[receiver] -= assets;
-        balances[receiver] -= assets;
+    function repay(uint256 repaymentAmount, address debtor) external override {
+        require(isControllerActive, "Controller is disabled");
+        require(userDebts[debtor] >= repaymentAmount, "Insufficient debt to repay");
+        require(userBalances[debtor] >= repaymentAmount, "Insufficient balance to repay");
+        totalAvailableAssets += repaymentAmount;
+        userDebts[debtor] -= repaymentAmount;
+        userBalances[debtor] -= repaymentAmount;
     }
 
-    function pullDebt(address from, uint256 assets) external override returns (bool) {
-        require(controllerEnabled, "Controller is disabled");
-        require(debts[from] >= assets, "Not enough debt to pull");
-        debts[from] -= assets;
+    function pullDebt(address debtor, uint256 debtAmount) external override returns (bool) {
+        require(isControllerActive, "Controller is disabled");
+        require(userDebts[debtor] >= debtAmount, "Insufficient debt to pull");
+        userDebts[debtor] -= debtAmount;
         return true;
     }
 
-    function liquidate(address violator) external override {
-        require(controllerEnabled, "Controller is disabled");
-        require(debts[violator] > 0, "No debt to liquidate");
-        totalAssets += debts[violator];
-        debts[violator] = 0;
+    function liquidate(address insolventAccount) external override {
+        require(isControllerActive, "Controller is disabled");
+        require(userDebts[insolventAccount] > 0, "No debt to liquidate");
+        totalAvailableAssets += userDebts[insolventAccount];
+        userDebts[insolventAccount] = 0;
     }
 
     function disableController() external {
         require(msg.sender == owner(), "Only owner can disable the controller");
         // Disable the controller
-        controllerEnabled = false;
+        isControllerActive = false;
     }
 
     function checkAccountStatus() external view override {
-        if (balances[msg.sender] < debts[msg.sender]) {
+        if (userBalances[msg.sender] < userDebts[msg.sender]) {
             // The account is underfunded
         } else {
             // The account is in good standing
@@ -58,27 +58,29 @@ contract IWorkshopVault is IVault {
     }
 
     function maxWithdraw() external view override returns (uint256) {
-        // Determine the maximum withdrawal amount
-        return balances[msg.sender] - debts[msg.sender];
+        // Calculate the maximum withdrawal amount
+        uint256 maxWithdrawalAmount = userBalances[msg.sender] - userDebts[msg.sender];
+        return maxWithdrawalAmount;
     }
 
     function maxRedeem() external view override returns (uint256) {
-        // Determine the maximum redeem amount
-        return balances[msg.sender] - debts[msg.sender];
+        // Calculate the maximum redemption amount
+        uint256 maxRedemptionAmount = userBalances[msg.sender] - userDebts[msg.sender];
+        return maxRedemptionAmount;
     }
 
-    function _convertToShares(uint256 assets) internal view returns (uint256) {
-        require(totalAssets > 0 && totalShares > 0, "Cannot convert to shares");
-        return (assets * totalShares) / totalAssets;
+    function _convertToShares(uint256 assetAmount) internal view returns (uint256) {
+        require(totalAvailableAssets > 0 && totalAvailableShares > 0, "Cannot convert to shares");
+        return (assetAmount * totalAvailableShares) / totalAvailableAssets;
     }
 
-    function _convertToAssets(uint256 shares) internal view returns (uint256) {
-        require(totalAssets > 0 && totalShares > 0, "Cannot convert to assets");
-        return (shares * totalAssets) / totalShares;
+    function _convertToAssets(uint256 shareAmount) internal view returns (uint256) {
+        require(totalAvailableAssets > 0 && totalAvailableShares > 0, "Cannot convert to assets");
+        return (shareAmount * totalAvailableAssets) / totalAvailableShares;
     }
 
     function _msgSender() internal view override returns (address) {
-        // Return the last borrower for borrowing purposes
-        return lastBorrower;
+        // Return the last borrowing user for borrowing purposes
+        return lastBorrowingUser;
     }
 }
