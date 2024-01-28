@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-
 pragma solidity ^0.8.19;
 
 contract WorkshopVault {
@@ -38,27 +37,47 @@ contract WorkshopVault {
     }
 
     function disableController() external {
-        // Disable the controller
         controllerEnabled = false;
     }
 
     function checkAccountStatus() external {
-        // Check the account status
         if (balances[msg.sender] < debts[msg.sender]) {
-            // The account is underfunded
+            emit AccountUnderfunded(msg.sender, balances[msg.sender], debts[msg.sender]);
         } else {
-            // The account is in good standing
+            emit AccountInGoodStanding(msg.sender, balances[msg.sender], debts[msg.sender]);
         }
     }
 
+    event AccountUnderfunded(address account, uint256 balance, uint256 debt);
+    event AccountInGoodStanding(address account, uint256 balance, uint256 debt);
+
     function maxWithdraw() external {
-        // Determine the maximum withdrawal amount
         uint256 maxWithdrawAmount = balances[msg.sender] - debts[msg.sender];
     }
 
     function maxRedeem() external {
-        // Determine the maximum redeem amount
         uint256 maxRedeemAmount = balances[msg.sender] - debts[msg.sender];
+    }
+
+    function deposit(uint256 assets) external payable {
+        require(assets > 0, "Deposit amount must be greater than zero");
+        balances[msg.sender] += assets;
+        totalAssets += assets;
+    }
+
+    function withdraw(uint256 assets) external {
+        require(balances[msg.sender] >= assets, "Insufficient balance");
+        require(totalAssets >= assets, "Not enough assets in the contract");
+        balances[msg.sender] -= assets;
+        totalAssets -= assets;
+        payable(msg.sender).transfer(assets);
+    }
+
+    function redeem(uint256 shares) external {
+        uint256 assets = _convertToAssets(shares);
+        require(totalShares >= shares, "Not enough shares to redeem");
+        totalShares -= shares;
+        payable(msg.sender).transfer(assets);
     }
 
     function _convertToShares(uint256 assets) internal {
@@ -72,7 +91,6 @@ contract WorkshopVault {
     }
 
     function _msgSender() internal view returns (address) {
-        // Return the last borrower for borrowing purposes
         return lastBorrower;
     }
 }
