@@ -25,6 +25,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     event Repay(address indexed caller, address indexed receiver, uint256 assets);
 
     error ControllerDisabled();
+    error SharesSeizureFailed();
 
     constructor(
         IEVC _evc,
@@ -258,5 +259,63 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return (debt * currentTotalBorrowed) / (totalBorrowed + 1);
     }
 
-    function liquidate(address violator, address collateral) external override {}
+function liquidate(address violator, address collateral) external callThroughEVC withChecks(_msgSenderForBorrow()) {
+    address msgSender = _msgSenderForBorrow();
+
+    uint256 repayAssets = _debtOf(violator);
+
+    if (msgSender == violator) {
+        revert SelfLiquidation();
+    }
+
+    if (repayAssets == 0) {
+        revert RepayAssetsInsufficient();
+    }
+
+    if (evc.isAccountStatusCheckDeferred(violator)) {
+        revert ViolatorStatusCheckDeferred();
+    }
+
+    if (!evc.isControllerEnabled(violator, address(this))) {
+        revert ControllerDisabled();
+    }
+
+    createVaultSnapshot();
+
+    uint256 seizeShares = _calculateSharesToSeize(violator, collateral, repayAssets);
+
+    _decreaseOwed(violator, repayAssets);
+    _increaseOwed(msgSender, repayAssets);
+
+    emit Repay(msgSender, violator, repayAssets);
+    emit Borrow(msgSender, msgSender, repayAssets);
+
+    if (collateral == address(this)) {
+        if (!evc.isCollateralEnabled(violator, collateral)) {
+            revert CollateralDisabled();
+        }
+
+        IERC20 _asset = ERC20(asset());
+        _asset.transferFrom(violator, msgSender, seizeShares);
+
+    } else {
+        liquidateCollateralShares(collateral, violator, msgSender, seizeShares);
+        evc.forgiveAccountStatusCheck(violator);
+    }
+}
+
+    function liquidateCollateralShares(
+        address vault,
+        address liquidated,
+        address liquidator,
+        uint256 shares
+    ) internal {
+        
+        bytes memory result =
+            evc.controlCollateral(vault, liquidated, 0, abi.encodeCall(ERC20.transfer, (liquidator, shares)));
+
+        if (!(result.length == 0 || abi.decode(result, (bool)))) {
+            revert SharesSeizureFailed();
+        }
+    }
 }
