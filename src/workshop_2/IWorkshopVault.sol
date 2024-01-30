@@ -9,13 +9,14 @@ interface IWorkshopVault is IVault {
     function borrow(uint256 assets, address receiver) external;
     function repay(uint256 assets, address receiver) external;
     function pullDebt(address from, uint256 assets) external returns (bool);
-    function liquidate(address violator, address collateral) external;
+    // function liquidate(address violator, address collateral) external;
 
-    // [ASSIGNMENT]: don't forget that the following functions must be overridden in order to support borrowing:
-    // [ASSIGNMENT]: - disableController()
-    // [ASSIGNMENT]: - checkAccountStatus()
-    // [ASSIGNMENT]: - maxWithdraw()
-    // [ASSIGNMENT]: - maxRedeem()
+    function disableController() external;
+    function checkAccountStatus(address account, address[] calldata collaterals) external returns (bytes4 magicValue);
+    function maxWithdraw(address owner) view external returns (uint256);
+    function maxRedeem(address owner) external view returns (uint256);
+    function convertToShares(uint256 assets) external view returns (uint256);
+    function convertToAssets(uint256 shares) external view returns (uint256);
     // [ASSIGNMENT]: - _convertToShares()
     // [ASSIGNMENT]: - _convertToAssets()
 
