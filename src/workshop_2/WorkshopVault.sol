@@ -20,6 +20,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: what is the purpose of this modifier?
+    // This modifier ensures function execution through EVC for custom logic and enhanced security.
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -33,7 +34,10 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
+    // The account status check nay not be needed (i) when an account only supplies, (ii) when account status is pre-validated, and (iii) for efficiency with gas savings.
+
     // [ASSIGNMENT]: is the vault status check always necessary? why?
+    // The vault status check is key for ensuring vault health but it may be skipped in operations when there is no change in the vault state.
     modifier withChecks(address account) {
         _;
 
@@ -46,7 +50,10 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
     // operations? why?
+    // This function cannot be used for authentication and it can also be insufficient for secure borrow operations.
+
     // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
+    // This function should revert and be guarded with appropriate access controls.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -58,11 +65,13 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+    // This function allows disabling the controller for security/operational reasons. And no, it is not safe to unconditionally disable the controller.
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // (i) Checking the health of an account while considering collaterals, and (ii) risk management with External Data Sources.
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -76,6 +85,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
+    // (i) Liquidity assessment, and (ii) vault's health assessment.
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
@@ -84,6 +94,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
         // order to evaluate the vault health?
+        // Take snapshots and implement historical state access.
 
         return IVault.checkVaultStatus.selector;
     }
