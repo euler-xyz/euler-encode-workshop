@@ -11,11 +11,10 @@ import {console} from "../../lib/forge-std/src/console.sol";
 import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
 
 ///////////////////FOR SIMPLICITY, THIS VAULT ONLY SUPPORT LENDING AND BORROWING////////////////////////////////
-///////////////////OF USDT. THIS IS THE BASE ASSET OF THIS VAULT>>>>>>>>>>>>>>>>///////////////////////////////
-//1. LENDING THE BASE ASSET (USDT)
-//2. SUPPLYING COLLATERAL(IN USDT VALUE/ ETH TO BE CONVERTED TO USDT BY THE VAULT ORACLE) AND BORROWING THE BASE ASSET (USDT)
-//3. LIQUIDATING UNDER-COLLATERIZED LOAN
-//4. DEPOSIT USDT AND BE AWARDED THE VAULT TOKEN AS SHARES WITH INTEREST ACCRUAL ON YOUR SHARES OVER TIME.
+///////////////////>>>>>>>>>>>>>>>>///////////////////////////////
+//1. LENDING THE BASE ASSET 
+//2. LIQUIDATING UNDER-COLLATERIZED LOAN
+//3. DEPOSIT USDT AND BE AWARDED THE VAULT TOKEN AS SHARES WITH INTEREST ACCRUAL ON YOUR SHARES OVER TIME.
 
 //reserve factor” — a percentage of capital supplied by lenders that they do not receive interest on.
 // The interest from this capital instead goes to the protocol
@@ -164,20 +163,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
 
         //loan value= collateral_factor * collateral_value
         //Therefore, loan_value > debt ? accountHealthy: accountUnHealthyStatus;
-        // if (accountDebt > 0) {
-        //     (
-        //         ,
-        //         uint256 liabilityValue,
-        //         uint256 collateralValue
-        //     ) = _calculateLiabilityAndCollateral(account, collaterals);
-        //  ERC4626 collateral = ERC4626(collaterals[0]);
-        //uint256 collateralShares = collateral.balanceOf(account);
-        //  console.log(collateralShares);
-
-        //     if (liabilityValue > collateralValue) {
-        //         revert AccountUnhealthy();
-        //     }
-        // }
+       
 
         /////////////////////////////////////HARDCODED/////////////////////////////
         require(accountDebt < type(uint104).max, "unhealthy Account");
@@ -185,7 +171,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         return IVault.checkAccountStatus.selector;
     }
 
-    // [ASSIGNMENT]: provide a couple use cases for this function
+
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(
@@ -193,8 +179,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
             "can only be called when checks in progress"
         );
 
-        /////////// SOME CUSTOM LOGIC EVALUATING VAULT HEALTH
-
+      
         //withChecks modifier must have taken the snapshot of the vault
         require(takeSnapshot.length != 0, "snapShot must have been taken");
 
@@ -207,8 +192,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
             Math.Rounding.Floor
         );
 
-        ////CHECK IF currentSupply > maxSupply? revert
-        ////CHECK if borrowLevel > maxBorrow? revert
+       
 
         delete takeSnapshot;
 
@@ -229,13 +213,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         shares = _convertToShares(assets, Math.Rounding.Floor);
         balanceOfShares[receiver] += shares;
 
-        evc.call(
-            address(this),
-            _msgSender(),
-            0,
-            abi.encodeWithSelector(this.mint.selector, shares, _msgSender())
-        );
-        ///  mint(shares, receiver);
+         mint(shares, receiver);
+       
     }
 
     function totalAssets() public view virtual override returns (uint256) {
@@ -382,8 +361,8 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         if (!evc.isControllerEnabled(_msgSender(), address(this))) {
             revert("is Disabled");
         }
-        require(assets != 0, "");
-        require(_msgSender() != from, "");
+        require(assets != 0, "invalid");
+        require(_msgSender() != from, "selfcall error");
         accountAccruedDebt[from] -= assets;
         accountAccruedDebt[_msgSender()] += assets;
         return true;
