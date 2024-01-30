@@ -19,7 +19,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         evc = _evc;
     }
 
-    // [ASSIGNMENT]: what is the purpose of this modifier?
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -32,8 +31,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
-    // [ASSIGNMENT]: is the vault status check always necessary? why?
     modifier withChecks(address account) {
         _;
 
@@ -44,9 +41,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
-    // operations? why?
-    // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
@@ -57,33 +51,30 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // IVault
-    // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
-    function disableController() external {
+    function disableController() external override{
         evc.disableController(_msgSender());
     }
 
-    // [ASSIGNMENT]: provide a couple use cases for this function
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
-    ) public virtual returns (bytes4 magicValue) {
+    ) public virtual override returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
 
-        // some custom logic evaluating the account health
+        // [TODO]: Write some custom logic evaluating the account health
+        // [TODO]: Check if it stays above a minimum threshold after considering the intended borrow amount.
+        // [TODO]: Compare the existing debt to the maximum allowed debt ratio or absolute limit.
+        // [TODO]: Consider factors like past repayment behavior and delinquencies.
 
         return IVault.checkAccountStatus.selector;
     }
 
-    // [ASSIGNMENT]: provide a couple use cases for this function
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
 
-        // some custom logic evaluating the vault health
-
-        // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
-        // order to evaluate the vault health?
+        // [TODO]: Write some custom logic evaluating the vault health
 
         return IVault.checkVaultStatus.selector;
     }
@@ -134,8 +125,53 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // IWorkshopVault
-    function borrow(uint256 assets, address receiver) external {}
-    function repay(uint256 assets, address receiver) external {}
-    function pullDebt(address from, uint256 assets) external returns (bool) {}
-    function liquidate(address violator, address collateral) external {}
+    function borrow(uint256 assets, address receiver) external {
+       require(isBorrowingAllowed(_msgSender(), assets), "Borrowing not allowed");
+
+       updateCollateralizationRatio(_msgSender(), assets);
+
+       _asset.safeTransfer(receiver, assets);
+       _borrowed[_msgSender()] += assets;
+       // [TODO:] add interest accrual logic here
+
+       emit Borrowed(_msgSender(), assets);
+    }
+
+    function repay(uint256 assets, address receiver) external {
+       require(_asset.balanceOf(_msgSender()) >= assets, "Insufficient assets for repayment");
+
+       updateCollateralizationRatio(_msgSender(), -assets); // Negative value for repayment
+
+       _asset.safeTransferFrom(_msgSender(), receiver, assets);
+       _borrowed[_msgSender()] -= assets;
+       // [TODO] Calculate interest accrued
+
+       emit Repaid(_msgSender(), assets);
+    }
+
+    function pullDebt(address from, uint256 assets) external returns (bool) {
+       require(_borrowed[from] >= assets, "Insufficient debt to pull");
+
+       // [TODO]: Transfer collateral to caller to cover debt
+
+       _borrowed[from] -= assets;
+       updateCollateralizationRatio(from, -assets);
+
+       emit DebtPulled(from, assets);
+
+       return true;
+    }
+
+    function liquidate(address violator, address collateral) external {
+       require(isLiquidationAllowed(violator), "Liquidation not allowed");
+
+       // [TODO]: Seize collateral
+
+       // [TODO]: Use seized collateral to repay debt
+
+       // [TODO]: Distribute any surplus to liquidator or other stakeholders
+
+       // 5. Emit event for liquidation
+       emit Liquidated(violator, collateral);
+   }
 }
