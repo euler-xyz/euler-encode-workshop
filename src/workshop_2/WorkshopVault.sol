@@ -4,11 +4,27 @@ pragma solidity ^0.8.19;
 
 import "openzeppelin/token/ERC20/extensions/ERC4626.sol";
 import "evc/interfaces/IEthereumVaultConnector.sol";
+import {Math} from "openzeppelin/utils/math/Math.sol";
 import "evc/interfaces/IVault.sol";
 import "./IWorkshopVault.sol";
 
 contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
+    using Math for uint256;
+
     IEVC internal immutable evc;
+
+    uint96 internal interestRate;
+    uint256 internal lastInterestUpdate;
+    uint256 internal totalBorrowed;
+    uint256 internal _totalAssets;
+
+    mapping(address => uint256) public userBorrowedAmounts;
+    mapping(ERC4626 => uint256) public collateralFactors;
+
+    event Borrow(address indexed caller, address indexed owner, uint256 assets);
+    event Repay(address indexed caller, address indexed receiver, uint256 assets);
+
+    error ControllerDisabled();
 
     constructor(
         IEVC _evc,
@@ -17,9 +33,9 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         string memory _symbol
     ) ERC4626(_asset) ERC20(_name, _symbol) {
         evc = _evc;
+        lastInterestUpdate = block.timestamp;
     }
 
-    // [ASSIGNMENT]: what is the purpose of this modifier?
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -32,8 +48,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
-    // [ASSIGNMENT]: is the vault status check always necessary? why?
     modifier withChecks(address account) {
         _;
 
@@ -44,25 +58,45 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
-    // operations? why?
-    // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
-    function _msgSender() internal view virtual override returns (address) {
-        if (msg.sender == address(evc)) {
-            (address onBehalfOfAccount,) = evc.getCurrentOnBehalfOfAccount(address(0));
-            return onBehalfOfAccount;
+    function _msgSenderForBorrow() internal view returns (address) {
+        address sender = msg.sender;
+        bool controllerEnabled;
+
+        if (sender == address(evc)) {
+            (sender, controllerEnabled) = evc.getCurrentOnBehalfOfAccount(address(this));
         } else {
-            return msg.sender;
+            controllerEnabled = evc.isControllerEnabled(sender, address(this));
         }
+
+        if (!controllerEnabled) {
+            revert ControllerDisabled();
+        }
+
+        return sender;
     }
 
-    // IVault
-    // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
+    function _convertToShares(uint256 assets, bool roundUp) internal view virtual returns (uint256) {
+        return _convert(assets, roundUp, totalSupply() + 1, _totalAssets + totalBorrowed + 1);
+    }
+
+    function _convertToAssets(uint256 shares, bool roundUp) internal view virtual returns (uint256) {
+        return _convert(shares, roundUp, _totalAssets + totalBorrowed + 1, totalSupply() + 1);
+    }
+
+    function _convert(uint256 from, bool roundUp, uint256 fromBase, uint256 toBase) internal pure returns (uint256) {
+        return roundUp
+            ? from.mulDiv(toBase, fromBase, Math.Rounding.Ceil)
+            : from.mulDiv(toBase, fromBase, Math.Rounding.Floor);
+    }
+
+    function totalAssets() public view override returns (uint256) {
+        return _totalAssets + totalBorrowed;
+    }
+
     function disableController() external {
         evc.disableController(_msgSender());
     }
 
-    // [ASSIGNMENT]: provide a couple use cases for this function
     function checkAccountStatus(
         address account,
         address[] calldata collaterals
@@ -70,22 +104,70 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
 
-        // some custom logic evaluating the account health
-
         return IVault.checkAccountStatus.selector;
     }
 
-    // [ASSIGNMENT]: provide a couple use cases for this function
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
 
-        // some custom logic evaluating the vault health
-
-        // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
-        // order to evaluate the vault health?
-
         return IVault.checkVaultStatus.selector;
+    }
+
+    // IWorkshopVault
+
+    function borrow(uint256 assets, address receiver) external callThroughEVC withChecks(_msgSenderForBorrow()) {
+        address msgSender = _msgSenderForBorrow();
+
+        require(assets != 0, "ZERO_ASSETS");
+
+        receiver = evc.getAccountOwner(receiver);
+
+        emit Borrow(msgSender, receiver, assets);
+
+        ERC20(asset()).transfer(receiver, assets);
+
+        _increaseBorrowedAmount(msgSender, assets);
+        _totalAssets -= assets;
+    }
+
+    function repay(uint256 assets, address receiver) external callThroughEVC withChecks(address(0)) {
+        address msgSender = _msgSender();
+
+        if (!evc.isControllerEnabled(receiver, address(this))) {
+            revert ControllerDisabled();
+        }
+
+        require(assets != 0, "ZERO_ASSETS");
+
+        emit Repay(msgSender, receiver, assets);
+
+        ERC20(asset()).transferFrom(msgSender, address(this), assets);
+
+        _decreaseBorrowedAmount(receiver, assets);
+        _totalAssets += assets;
+    }
+
+    function pullDebt(
+        address from,
+        uint256 assets
+    ) external callThroughEVC withChecks(_msgSenderForBorrow()) returns (bool) {
+        address msgSender = _msgSenderForBorrow();
+
+        if (!evc.isControllerEnabled(from, address(this))) {
+            revert ControllerDisabled();
+        }
+
+        require(assets != 0, "ZERO_AMOUNT");
+        require(msgSender != from, "SELF_DEBT_PULL");
+
+        _decreaseBorrowedAmount(from, assets);
+        _increaseBorrowedAmount(msgSender, assets);
+
+        emit Repay(msgSender, from, assets);
+        emit Borrow(msgSender, msgSender, assets);
+
+        return true;
     }
 
     function deposit(
@@ -133,9 +215,48 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return super.transferFrom(from, to, value);
     }
 
-    // IWorkshopVault
-    function borrow(uint256 assets, address receiver) external {}
-    function repay(uint256 assets, address receiver) external {}
-    function pullDebt(address from, uint256 assets) external returns (bool) {}
-    function liquidate(address violator, address collateral) external {}
+    function _accrueInterest() internal virtual returns (uint256, uint256) {
+        (uint256 currentTotalBorrowed, bool shouldUpdate) = _accrueInterestCalculate();
+
+        if (shouldUpdate) {
+            totalBorrowed = currentTotalBorrowed;
+            lastInterestUpdate = block.timestamp;
+        }
+
+        return (currentTotalBorrowed, interestRate);
+    }
+
+    function _accrueInterestCalculate() internal view virtual returns (uint256, bool) {
+        uint256 timeElapsed = block.timestamp - lastInterestUpdate;
+        uint256 oldTotalBorrowed = totalBorrowed;
+
+        if (timeElapsed == 0) {
+            return (oldTotalBorrowed, false);
+        }
+
+        uint256 interestAccumulator = (interestRate * timeElapsed) / 1 days;
+
+        uint256 newTotalBorrowed = oldTotalBorrowed + (oldTotalBorrowed * interestAccumulator) / 1e18;
+
+        return (newTotalBorrowed, true);
+    }
+
+    function _increaseBorrowedAmount(address account, uint256 assets) internal virtual {
+        userBorrowedAmounts[account] += assets;
+        totalBorrowed += assets;
+    }
+
+    function _decreaseBorrowedAmount(address account, uint256 assets) internal virtual {
+        userBorrowedAmounts[account] -= assets;
+        totalBorrowed -= assets;
+    }
+
+    function _debtOf(address account) public view returns (uint256) {
+        (uint256 currentTotalBorrowed,) = _accrueInterestCalculate();
+        uint256 debt = userBorrowedAmounts[account];
+        if (debt == 0) return 0;
+        return (debt * currentTotalBorrowed) / (totalBorrowed + 1);
+    }
+
+    function liquidate(address violator, address collateral) external override {}
 }
