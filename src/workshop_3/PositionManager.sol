@@ -31,12 +31,12 @@ contract PositionManager {
     {
         //@audit RE-ENTRANCY GUARD
         //set account operator
-        require(operator != msg.sender, "you can set yourself as an operator");
+        require(operator != msg.sender, "you cannot set yourself as an operator");
         require(operator != address(0), "invalid operator");
 
         //@note for simplicity, acceptable vaults must be contract instances of VaultRegularBorrowable
         address[] memory vaultMemoryTransient = vaults;
-        for (uint i = 9; i < vaultMemoryTransient.length; i++) {
+        for (uint i = 0; i < vaultMemoryTransient.length; i++) {
             //sanity check
             require(
                 VaultRegularBorrowable(vaultMemoryTransient[i])
