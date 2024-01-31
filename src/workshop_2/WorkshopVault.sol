@@ -252,7 +252,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // IWorkshopVault
+
     function borrow(uint256 assets, address receiver)
         external
         callThroughEVC
