@@ -55,6 +55,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         evc = _evc;
         lastInterestUpdate = block.timestamp;
         interestAccumulator = ONE;
+        interestRate256 = 3; // 3% APY
     }
 
     modifier nonReentrant() virtual {
@@ -531,7 +532,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
             }
 
             ERC20(asset()).transferFrom(violator, msgSender, seizeShares);
-        } else {           
+        } else {
             evc.forgiveAccountStatusCheck(violator);
         }
     }

@@ -21,8 +21,9 @@ contract VaultRegularBorrowable is WorkshopVault {
     error NoLiquidationOpportunity();
     error RepayAssetsInsufficient();
     error RepayAssetsExceeded();
-    error ViolatorStatusCheckDeferred();    
+    error ViolatorStatusCheckDeferred();
     error InvalidCollateralFactor();
+    error SharesSeizureFailed();
 
     constructor(
         IEVC _evc,
@@ -46,7 +47,7 @@ contract VaultRegularBorrowable is WorkshopVault {
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
 
         // some custom logic evaluating the account health
-       if (debtOf(account) > 0) {
+        if (debtOf(account) > 0) {
             (, uint256 liabilityValue, uint256 collateralValue) = _calculateLiabilityAndCollateral(account, collaterals);
 
             if (liabilityValue > collateralValue) {
@@ -59,8 +60,9 @@ contract VaultRegularBorrowable is WorkshopVault {
 
     function liquidate(
         address violator,
-        address collateral
-    ) external override callThroughEVC nonReentrant withChecks(_msgSenderForBorrow()) {
+        address collateral,
+        uint256 repayAssets
+    ) external callThroughEVC nonReentrant withChecks(_msgSenderForBorrow()) {
         address msgSender = _msgSenderForBorrow();
 
         if (msgSender == violator) {
@@ -87,6 +89,11 @@ contract VaultRegularBorrowable is WorkshopVault {
             (uint256 liabilityAssets, uint256 liabilityValue, uint256 collateralValue) =
                 _calculateLiabilityAndCollateral(violator, evc.getCollaterals(violator));
 
+            // trying to repay more than the violator owes
+            if (repayAssets > liabilityAssets) {
+                revert RepayAssetsExceeded();
+            }
+
             // check if violator's account is unhealthy
             if (collateralValue >= liabilityValue) {
                 revert NoLiquidationOpportunity();
@@ -99,11 +106,25 @@ contract VaultRegularBorrowable is WorkshopVault {
                 liquidationIncentive = MAX_LIQUIDATION_INCENTIVE;
             }
 
-            
+            // calculate the max repay value that will bring the violator back to target health factor
+            uint256 maxRepayValue = (TARGET_HEALTH_FACTOR * liabilityValue - 100 * collateralValue)
+                / (TARGET_HEALTH_FACTOR - (cf * (100 + liquidationIncentive)) / 100);
+
+            // get the desired value of repay assets
+            uint256 repayValue =
+                IPriceOracle(oracle).getQuote(repayAssets, address(ERC20(asset())), address(referenceAsset));
+
+            // check if the liquidator is not trying to repay too much.
+            if (
+                repayValue > maxRepayValue && repayAssets > HARD_LIQUIDATION_THRESHOLD * 10 ** ERC20(asset()).decimals()
+            ) {
+                revert RepayAssetsExceeded();
+            }
+
             address collateralAsset = address(ERC4626(collateral).asset());
             uint256 one = 10 ** ERC20(collateralAsset).decimals();
 
-            uint256 seizeValue = (liabilityAssets * (100 + liquidationIncentive)) / 100;
+            uint256 seizeValue = (repayValue * (100 + liquidationIncentive)) / 100;
 
             uint256 seizeAssets =
                 (seizeValue * one) / IPriceOracle(oracle).getQuote(one, collateralAsset, address(referenceAsset));
@@ -115,11 +136,11 @@ contract VaultRegularBorrowable is WorkshopVault {
             }
         }
 
-        _decreaseOwed(violator, seizeShares);
-        _increaseOwed(msgSender, seizeShares);
+        _decreaseOwed(violator, repayAssets);
+        _increaseOwed(msgSender, repayAssets);
 
-        emit Repay(msgSender, violator, seizeShares);
-        emit Borrow(msgSender, msgSender, seizeShares);
+        emit Repay(msgSender, violator, repayAssets);
+        emit Borrow(msgSender, msgSender, repayAssets);
 
         if (collateral == address(this)) {
             // if the liquidator tries to seize the assets from this vault,
@@ -129,7 +150,17 @@ contract VaultRegularBorrowable is WorkshopVault {
             }
 
             ERC20(asset()).transferFrom(violator, msgSender, seizeShares);
-        } else {           
+        } else {
+            // Control the collateral in order to transfer shares from the violator's vault to the liquidator.
+            bytes memory result = evc.controlCollateral(
+                collateral, violator, 0, abi.encodeCall(ERC20(asset()).transfer, (msgSender, seizeShares))
+            );
+
+            if (!abi.decode(result, (bool))) {
+                revert SharesSeizureFailed();
+            }
+
+            // Allow violator to have unhealthy state after the liquidation
             evc.forgiveAccountStatusCheck(violator);
         }
     }
@@ -140,7 +171,8 @@ contract VaultRegularBorrowable is WorkshopVault {
     ) internal view returns (uint256 liabilityAssets, uint256 liabilityValue, uint256 collateralValue) {
         liabilityAssets = debtOf(account);
 
-        liabilityValue = IPriceOracle(oracle).getQuote(liabilityAssets, address(ERC20(asset())), address(referenceAsset));
+        liabilityValue =
+            IPriceOracle(oracle).getQuote(liabilityAssets, address(ERC20(asset())), address(referenceAsset));
 
         for (uint256 i = 0; i < collaterals.length; ++i) {
             ERC4626 collateral = ERC4626(collaterals[i]);
