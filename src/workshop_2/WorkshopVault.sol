@@ -6,13 +6,14 @@ import "openzeppelin/token/ERC20/extensions/ERC4626.sol";
 import "evc/interfaces/IEthereumVaultConnector.sol";
 import "evc/interfaces/IVault.sol";
 import "./IWorkshopVault.sol";
-import {Math} from "../../openzeppelin/utils/math/Math.sol";
-import {console} from "../../lib/forge-std/src/console.sol";
-import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
+
+//import {Math} from "../../openzeppelin/utils/math/Math.sol";
+//import {console} from "../../lib/forge-std/src/console.sol";
+//import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
 
 ///////////////////FOR SIMPLICITY, THIS VAULT ONLY SUPPORT LENDING AND BORROWING////////////////////////////////
 ///////////////////>>>>>>>>>>>>>>>>///////////////////////////////
-//1. LENDING THE BASE ASSET 
+//1. LENDING THE BASE ASSET
 //2. LIQUIDATING UNDER-COLLATERIZED LOAN
 //3. DEPOSIT USDT AND BE AWARDED THE VAULT TOKEN AS SHARES WITH INTEREST ACCRUAL ON YOUR SHARES OVER TIME.
 
@@ -26,7 +27,7 @@ import {ReentrancyGuard} from "../../openzeppelin/utils/ReentrancyGuard.sol";
 //@Note The loan to value is the current value of the loan as a percentage of the collateral value
 //liquidation factor — a threshold percentage at which the collateral can be forcibly taken from the borrower.
 
-contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
+contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     //error
     error unAbleToBorrow();
     error stillOwing();
@@ -136,7 +137,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         }
     }
 
-    function disableController() external nonReentrant {
+    function disableController() external {
         if (accountAccruedDebt[_msgSender()] > 0) {
             revert stillOwing();
         } else {
@@ -163,14 +164,12 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
 
         //loan value= collateral_factor * collateral_value
         //Therefore, loan_value > debt ? accountHealthy: accountUnHealthyStatus;
-       
 
         /////////////////////////////////////HARDCODED/////////////////////////////
         require(accountDebt < type(uint104).max, "unhealthy Account");
 
         return IVault.checkAccountStatus.selector;
     }
-
 
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
@@ -179,7 +178,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
             "can only be called when checks in progress"
         );
 
-      
         //withChecks modifier must have taken the snapshot of the vault
         require(takeSnapshot.length != 0, "snapShot must have been taken");
 
@@ -192,8 +190,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
             Math.Rounding.Floor
         );
 
-       
-
         delete takeSnapshot;
 
         return IVault.checkVaultStatus.selector;
@@ -205,7 +201,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         override
         callThroughEVC
         withChecks(address(0))
-        nonReentrant
         returns (uint256 shares)
     {
         assetToBorrow.transferFrom(_msgSender(), address(this), assets);
@@ -213,8 +208,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         shares = _convertToShares(assets, Math.Rounding.Floor);
         balanceOfShares[receiver] += shares;
 
-         mint(shares, receiver);
-       
+        _mint(receiver, shares);
     }
 
     function totalAssets() public view virtual override returns (uint256) {
@@ -228,7 +222,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         withChecks(address(0))
         returns (uint256 assets)
     {
-        _mint(receiver, shares);
+        return super.mint(shares, receiver);
     }
 
     function withdraw(
@@ -297,7 +291,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         external
         callThroughEVC
         withChecks(_msgSenderBorrower())
-        nonReentrant
     {
         //////////////////////CHECKS
         if (!evc.isControllerEnabled(_msgSender(), address(this))) {
@@ -333,7 +326,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
     function repay(uint256 assets, address receiver)
         external
         withChecks(address(0))
-        nonReentrant
     {
         if (!evc.isControllerEnabled(receiver, address(this))) {
             revert("is Disabled");
@@ -354,7 +346,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         external
         callThroughEVC
         withChecks(_msgSender())
-        nonReentrant
         returns (bool)
     {
         //ensure the address calling is under the control of EVC
@@ -372,7 +363,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault, ReentrancyGuard {
         external
         callThroughEVC
         withChecks(_msgSender())
-        nonReentrant
     {
         //@audit for now,  the vault needs to pay the debt, huh? bad business lol
         uint assetDebt = accountAccruedDebt[violator];
