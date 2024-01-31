@@ -4,17 +4,24 @@ pragma solidity ^0.8.19;
 
 import "openzeppelin/token/ERC20/extensions/ERC4626.sol";
 import "evc/interfaces/IEthereumVaultConnector.sol";
-import "solmate/utils/FixedPointMathLib.sol";
+import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import "evc/interfaces/IVault.sol";
 import "./IWorkshopVault.sol";
 
 contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
+    using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
+
+    event Borrow(address indexed caller, address indexed owner, uint256 assets);
+    event Repay(address indexed caller, address indexed receiver, uint256 assets);
 
     uint256 public totalBorrowed;
     uint256 internal _totalAssets;
+
     mapping(address account => uint256 assets) internal owed;
+
     IEVC internal immutable evc;
     bytes private snapshot;
 
@@ -160,64 +167,156 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 
     // IWorkshopVault
     function borrow(uint256 assets, address receiver) external callThroughEVC {
-        IERC20 _asset = ERC20(asset());
         address msgSender = _msgSenderForBorrow();
+
         createVaultSnapshot();
+
         require(assets != 0, "ZERO_ASSETS");
-        receiver = getAccountOwner(receiver);        
-        _asset.transfer(receiver, assets);
+
+        receiver = getAccountOwner(receiver);
+
         _increaseOwed(msgSender, assets);
+
+        emit Borrow(msgSender, receiver, assets);
+
+        IERC20(asset()).transfer(receiver, assets);
+
         _totalAssets -= assets;
+
+        requireAccountAndVaultStatusCheck(msgSender);
     }
     
     function repay(uint256 assets, address receiver) external {
-        IERC20 _asset = ERC20(asset());
         address msgSender = _msgSender();
-        if (!evc.isControllerEnabled(receiver, address(this))) {
+
+        if (!isControllerEnabled(receiver, address(this))) {
             revert();
         }
+
         createVaultSnapshot();
+
         require(assets != 0, "ZERO_ASSETS");
-        _asset.transferFrom(msgSender, address(this), assets);
-        _decreaseOwed(receiver, assets);
+
+        IERC20(asset()).transferFrom(msgSender, address(this), assets);
+
         _totalAssets += assets;
+
+        _decreaseOwed(receiver, assets);
+
+        emit Repay(msgSender, receiver, assets);
+
+        requireAccountAndVaultStatusCheck(address(0));
     }
     
     function pullDebt(address from, uint256 assets) external returns (bool) {
         address msgSender = _msgSenderForBorrow();
-        if (!evc.isControllerEnabled(from, address(this))) {
+
+        if (!isControllerEnabled(from, address(this))) {
             revert();
         }
+
         createVaultSnapshot();
+
         require(assets != 0, "ZERO_AMOUNT");
         require(msgSender != from, "SELF_DEBT_PULL");
+
         _decreaseOwed(from, assets);
         _increaseOwed(msgSender, assets);
+
+        emit Repay(msgSender, from, assets);
+        emit Borrow(msgSender, msgSender, assets);
+
+        requireAccountAndVaultStatusCheck(msgSender);
 
         return true;
     }
 
     function liquidate(address violator, address collateral) external {
-        address msgSender = _msgSender();
+        address msgSender = _msgSenderForBorrow();
 
-        if (!evc.isControllerEnabled(msgSender, address(this))) {
-            revert("Not authorized to liquidate");
+        if (msgSender == violator) {
+            revert();
         }
 
-        uint256 collateralAmount = balanceOf(violator);
+        if (isAccountStatusCheckDeferred(violator)) {
+            revert();
+        }
 
-        require(collateralAmount > 0, "No collateral to liquidate");
+        if (!isControllerEnabled(violator, address(this))) {
+            revert();
+        }
 
-        _transfer(violator, msgSender, collateralAmount);
+        createVaultSnapshot();
+
+        //uint256 seizeShares = _calculateSharesToSeize(violator, collateral, repayAssets);
+        uint256 violator_balance = balanceOf(violator);
+        uint256 msgSender_balance = balanceOf(msgSender);
+
+        _decreaseOwed(violator, violator_balance);
+        _increaseOwed(msgSender, msgSender_balance);
+
+        emit Repay(msgSender, violator, violator_balance);
+        emit Borrow(msgSender, msgSender, msgSender_balance);
+
+        if (collateral == address(this)) {
+
+            if (!isCollateralEnabled(violator, collateral)) {
+                revert();
+            }
+
+            IERC20(asset()).transfer(msgSender, violator_balance);
+
+        } else {
+            liquidateCollateralShares(collateral, violator, msgSender, violator_balance);
+
+            forgiveAccountStatusCheck(violator);
+        }
+
+        requireAccountAndVaultStatusCheck(msgSender);
     }
 
-    function createVaultSnapshot() internal {
-        uint256 currentTotalBorrowed;
-        uint256 currentInterestAccumulator;
-        (currentTotalBorrowed, currentInterestAccumulator) = _accrueInterest();
+    function maxWithdraw(address owner) public view virtual override returns (uint256) {
+        uint256 totAssets = totalAssets();
+        uint256 ownerAssets = _convertToAssets(balanceOf(owner), false);
 
-        if (snapshot.length == 0) {
-            snapshot = abi.encode(_convertToAssets(totalSupply(), false), currentTotalBorrowed);
+        return ownerAssets > totAssets ? totAssets : ownerAssets;
+    }
+
+    function maxRedeem(address owner) public view virtual override returns (uint256) {
+        uint256 totAssets = totalAssets();
+        uint256 ownerShares = balanceOf(owner);
+
+        return _convertToAssets(ownerShares, false) > totAssets ? _convertToShares(totAssets, false) : ownerShares;
+    }
+
+    function liquidateCollateralShares(
+        address vault,
+        address liquidated,
+        address liquidator,
+        uint256 shares
+    ) public {
+        bytes memory result =
+            evc.controlCollateral(vault, liquidated, 0, abi.encodeCall(IERC20.transfer, (liquidator, shares)));
+
+        if (!(result.length == 0 || abi.decode(result, (bool)))) {
+            revert();
+        }
+    }
+
+    function forgiveAccountStatusCheck(address account) internal {
+        evc.forgiveAccountStatusCheck(account);
+    }
+
+    function createVaultSnapshot() internal virtual returns (bytes memory) {
+        (uint256 currentTotalBorrowed,) = _accrueInterest();
+        return abi.encode(_convertToAssets(totalSupply(), false), currentTotalBorrowed);
+    }
+
+    function requireAccountAndVaultStatusCheck(address account) internal {
+        if (account == address(0)) {
+            evc.requireVaultStatusCheck();
+        } else {
+            evc.requireAccountAndVaultStatusCheck(account);
         }
     }
 
@@ -238,26 +337,24 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return sender;
     }
 
+    function isControllerEnabled(address account, address vault) internal view returns (bool) {
+        return evc.isControllerEnabled(account, vault);
+    }
+
+    function isAccountStatusCheckDeferred(address account) internal view returns (bool) {
+        return evc.isAccountStatusCheckDeferred(account);
+    }
+
+    function isCollateralEnabled(address account, address vault) internal view returns (bool) {
+        return evc.isCollateralEnabled(account, vault);
+    }
+
     function getAccountOwner(address account) internal view returns (address owner_out) {
         try evc.getAccountOwner(account) returns (address _owner) {
             owner_out = _owner;
         } catch {
             owner_out = account;
         }
-    }
-
-    function maxWithdraw(address owner) public view virtual override returns (uint256) {
-        uint256 totAssets = totalAssets();
-        uint256 ownerAssets = _convertToAssets(balanceOf(owner), false);
-
-        return ownerAssets > totAssets ? totAssets : ownerAssets;
-    }
-
-    function maxRedeem(address owner) public view virtual override returns (uint256) {
-        uint256 totAssets = totalAssets();
-        uint256 ownerShares = balanceOf(owner);
-
-        return _convertToAssets(ownerShares, false) > totAssets ? _convertToShares(totAssets, false) : ownerShares;
     }
 
     function _convertToShares(uint256 assets, bool roundUp) internal view virtual returns (uint256) {
