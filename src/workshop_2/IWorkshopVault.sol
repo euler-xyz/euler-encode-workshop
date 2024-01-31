@@ -26,4 +26,6 @@ interface IWorkshopVault is IVault {
     // [ASSIGNMENT] optional: integrate with an oracle of choice in checkAccountStatus() and liquidate()
     // [ASSIGNMENT] optional: implement a circuit breaker in checkVaultStatus(), may be EIP-7265 inspired
     // [ASSIGNMENT] optional: add EIP-7540 compatibility for RWAs
+    function doCheckVaultStatus(bytes memory snapshot) external;
+    function doTakeVaultSnapshot() external returns (bytes memory snapshot);
 }
