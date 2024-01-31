@@ -10,7 +10,7 @@ import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 ///////////////////////////SUMMARY///////////////////////////////////abi
 
 
-contract PositionManager is Owned {
+contract PositionManager is Owned, AutomationCompatibleInterface {
     //TYPES
     IEVC internal evc;
 
