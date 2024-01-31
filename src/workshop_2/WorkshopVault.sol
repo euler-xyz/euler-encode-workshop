@@ -34,7 +34,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         assetss = _asset;
     }
 
-  
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -52,7 +51,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-  
     modifier withChecks(address account) {
         //do take the snapshot of the vault and compare with the borrow cap
         //totalBorrowedasset > borrowCap ? revert
@@ -77,7 +75,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    
     function checkAccountStatus(address account, address[] calldata collaterals)
         public
         virtual
@@ -94,7 +91,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return IVault.checkAccountStatus.selector;
     }
 
-  
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(
@@ -124,15 +120,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return assets;
     }
 
-
-    function _updateState(uint assets) internal returns (bool) {
-        uint shares = previewDeposit(assets);
-        if (shares > 0) {
-            return true;
-        }
-        return false;
-    }
-
     function deposit(uint256 assets, address receiver)
         public
         virtual
@@ -141,12 +128,13 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         withChecks(address(0))
         returns (uint256 shares)
     {
-        require(assets > 0, "INVALID asset");
+        require(assets > 0, "ZERO ASSET");
         assetss.transferFrom(_msgSender(), address(this), assets);
-        balanceOfs[receiver] += assets;
-        _mint(receiver, assets);
 
-        emit deposits(assets, receiver, _msgSender());
+        totalBorrowedasset += assets;
+        shares = _convertToShares(assets, Math.Rounding.Floor);
+        balanceOfs[receiver] += shares;
+        _mint(receiver, shares);
     }
 
     function convertToAssets(uint256 shares)
@@ -239,110 +227,112 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
         return msg.sender;
     }
-function disableController() external {
+
+    function disableController() external {
         if (debtor[_msgSender()] > 0) {
             revert();
         } else {
             evc.disableController(_msgSender());
         }
-     }
-function borrow(uint256 assets, address receiver)
-    external
-    callThroughEVC
-    withChecks(_msgSenderBorrower())
-{
-    require(
-        evc.isControllerEnabled(_msgSender(), address(this)),
-        "oops you cannot borrow"
-    );
-
-    if (assets <= 0) {
-        revert NO_asset();
     }
 
-    debtor[_msgSenderBorrower()] += assets;
-    totalBorrowedasset += assets;
+    function borrow(uint256 assets, address receiver)
+        external
+        callThroughEVC
+        withChecks(_msgSenderBorrower())
+    {
+        require(
+            evc.isControllerEnabled(_msgSender(), address(this)),
+            "oops you cannot borrow"
+        );
 
-    assetss.transfer(receiver, assets);
-} 
+        if (assets <= 0) {
+            revert NO_asset();
+        }
+
+        debtor[_msgSenderBorrower()] += assets;
+        totalBorrowedasset += assets;
+
+        assetss.transfer(receiver, assets);
+    }
 
     function repay(uint256 assets, address receiver)
-    external
-    callThroughEVC
-    withChecks(address(0))
-{
-    require(assets != 0, "ZERO_assetS");
-    require(
-        evc.isControllerEnabled(receiver, address(this)),
-        "controller not enabled for this operator"
-    );
-    debtor[receiver] -= assets;
-    totalBorrowedasset -= assets;
-    emit Repay(_msgSender(), receiver, assets);
-    assetss.transferFrom(_msgSender(), address(this), assets);
-}
+        external
+        callThroughEVC
+        withChecks(address(0))
+    {
+        require(assets != 0, "ZERO_assetS");
+        require(
+            evc.isControllerEnabled(receiver, address(this)),
+            "controller not enabled for this operator"
+        );
+        debtor[receiver] -= assets;
+        totalBorrowedasset -= assets;
+        emit Repay(_msgSender(), receiver, assets);
+        assetss.transferFrom(_msgSender(), address(this), assets);
+    }
 
-function pullDebt(address from, uint256 assets)
-    external
-    callThroughEVC
-    withChecks(_msgSender())
-    returns (bool)
-{
-    require(
-        evc.isControllerEnabled(_msgSender(), address(this)),
-        "controller not enabled for this operator"
-    );
+    function pullDebt(address from, uint256 assets)
+        external
+        callThroughEVC
+        withChecks(_msgSender())
+        returns (bool)
+    {
+        require(
+            evc.isControllerEnabled(_msgSender(), address(this)),
+            "controller not enabled for this operator"
+        );
 
-    require(assets != 0, "no amount");
+        require(assets != 0, "no amount");
 
-    debtor[_msgSender()] += assets;
-    debtor[from] -= assets;
+        debtor[_msgSender()] += assets;
+        debtor[from] -= assets;
 
-    return true;
-}
+        return true;
+    }
 
-function liquidate(address violator, address collateral)
-    external
-    callThroughEVC
-    withChecks(_msgSender())
-{
-    uint debt = debtor[violator];
-    //if debt value > collateral value
-    //UNDER_COLLATERIZED LOAN?
-}
+    function liquidate(address violator, address collateral)
+        external
+        callThroughEVC
+        withChecks(_msgSender())
+    {
+        uint debt = debtor[violator];
+        //if debt value > collateral value
+        //UNDER_COLLATERIZED LOAN?
+    }
 
-function maxWithdraw(address owner)
-    public
-    view
-    virtual
-    override
-    returns (uint256)
-{
-    uint256 borrowedassets = totalAssets();
-    uint256 ownerassets = convertToAssets(balanceOfs[owner] - debtor[owner]);
+    function maxWithdraw(address owner)
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
+        uint256 borrowedassets = totalAssets();
+        uint256 ownerassets = convertToAssets(
+            balanceOfs[owner] - debtor[owner]
+        );
 
-    return ownerassets > borrowedassets ? borrowedassets : ownerassets;
-}
+        return ownerassets > borrowedassets ? borrowedassets : ownerassets;
+    }
 
-function maxRedeem(address owner)
-    public
-    view
-    virtual
-    override
-    returns (uint256)
-{
-    uint256 borrowedassets = totalAssets();
-    uint256 ownerShares = balanceOfs[owner];
+    function totalAssets() public view virtual override returns (uint256) {
+        return totalBorrowedasset;
+    }
 
-    return
-        convertToAssets(ownerShares) > borrowedassets
-            ? _convertToShares(borrowedassets, Math.Rounding.Floor)
-            : ownerShares;
-}
+    function maxRedeem(address owner)
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
+        uint256 borrowedassets = totalAssets();
+        uint256 ownerShares = balanceOfs[owner] - debtor[owner];
 
-
-
-    
-
-   
+        return
+            _convertToAssets(ownerShares, Math.Rounding.Floor) > borrowedassets
+                ? _convertToShares(borrowedassets, Math.Rounding.Floor)
+                : ownerShares;
+    }
 }
