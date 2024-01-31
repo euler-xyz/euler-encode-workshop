@@ -106,7 +106,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         if (totalBorrowedasset > borrowCap) {
             revert("borrow cap exceeded");
         }
-
         //EIP-7265 should implemented here to control large outflow of funds
 
         // [ASSIGNMENT]: what can be done if the vault status check needs access to the initial state of the vault in
@@ -125,10 +124,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return assets;
     }
 
-    /**
-     * @dev Calculates the accumulated debt balance of the user
-     * @return true if updated
-     **/
+
     function _updateState(uint assets) internal returns (bool) {
         uint shares = previewDeposit(assets);
         if (shares > 0) {
