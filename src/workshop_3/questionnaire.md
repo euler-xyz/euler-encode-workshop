@@ -15,8 +15,8 @@
 1. How does the simulation feature of the EVC work?
     - The simulation mechanics: It calls batchSimulation() instead of batch() because normal batch calls waste gas and don't return any data. However, simulations collect the return data, reverting with this data as error data, try-catching that execption, and returns the caught error data.
 1. Provide a couple of use cases for the `permit` functionality of the EVC.
-    - This method allows these use cases: delegated transactions allowing another party/address to execute transactions on their behalf without transfering the actual assets. It also streamlines approvals by enabling one-step approval process enhancing UX and transaction costs.
+    - This method allows these use cases: delegated transactions allowing another party/address to execute transactions on their behalf without transfering the actual assets. It also streamlines approvals by enabling one-step approval process enhancing UX and saving on transaction costs.
 1. What is the purpose of the nonce namespace?
-    - 
+    - They're separate streams of execution orders, check for the state of other namespaces and if they can merge together.
 1. Why should the EVC neither be given any privileges nor hold any tokens?
-    - 
+    - This ensures a high level of security and risk management. This way, the EVC cannot autonomously perform actions that might compromise the funds it handles. Moreover, not holding tokens prevents it from becoming a target for theft or hacking.
