@@ -3,11 +3,23 @@
 pragma solidity ^0.8.19;
 
 import "openzeppelin/token/ERC20/extensions/ERC4626.sol";
+import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import "evc/interfaces/IEthereumVaultConnector.sol";
 import "evc/interfaces/IVault.sol";
 import "./IWorkshopVault.sol";
 
 contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
+    using SafeTransferLib for ERC20;
+    using FixedPointMathLib for uint256;
+
+    error AccountUnhealthy();
+
+    uint256 public borrowCap;
+    uint256 public totalBorrowed;
+    bytes private snapshotCreated;
+    mapping(address account => uint256 assets) internal owed;
+
     IEVC internal immutable evc;
 
     constructor(
@@ -68,7 +80,12 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
     // To check if the user has fully repaid their loan otherwise the user could get away with the loan. No it's not safe to unconditionally disable the controller, we need to check if it has been repaid.
     function disableController() external {
-        evc.disableController(_msgSender());
+        address msgSender = _msgSender();
+        if (_debtOf(msgSender) == 0) {
+            evc.disableController(msgSender);
+        } else {
+            revert OutstandingDebt();
+        }
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
@@ -81,6 +98,24 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         require(evc.areChecksInProgress(), "can only be called when checks in progress");
 
         // some custom logic evaluating the account health
+        uint256 liabilityAssets = _debtOf(account);
+
+        if (liabilityAssets == 0) return;
+
+        // in this simple example, let's say that it's only possible to borrow against
+        // the same asset up to 90% of its value
+        for (uint256 i = 0; i < collaterals.length; ++i) {
+            if (collaterals[i] == address(this)) {
+                uint256 collateral = _convertToAssets(balanceOf[account], false);
+                uint256 maxLiability = (collateral * 9) / 10;
+
+                if (liabilityAssets <= maxLiability) {
+                    return;
+                }
+            }
+        }
+
+        revert AccountUnhealthy();
 
         return IVault.checkAccountStatus.selector;
     }
@@ -98,6 +133,36 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         // We could store the initial state in a separate variable during the initialization of the contract. This variable can be accessed by the vault status check function.
 
         return IVault.checkVaultStatus.selector;
+    }
+
+    function maxWithdraw(address owner) public view virtual override returns (uint256) {
+        uint256 totalAssets = _totalAssets;
+        uint256 ownAssets = balanceOf(owner);
+
+        return _convertToShares(ownAssets, false) > totalAssets ? _convertToShares(totalAssets, false) : ownAssets;
+    }
+
+    function maxRedeem(address owner) public view virtual override returns (uint256) {
+        uint256 totalAssets = totalAssets();
+        uint256 ownerShares = balanceOf(owner);
+
+        return _convertToAssets(ownerShares, false) > totalAssets ? _convertToShares(totalAssets, false) : ownerShares;
+    }
+
+    function _convertToShares(uint256 assets, bool roundUp) internal view virtual returns (uint256) {
+        (uint256 currentTotalBorrowed,,) = _accrueInterestCalculate();
+
+        return roundUp
+            ? assets.mulDivUp(totalSupply() + 1, _totalAssets + currentTotalBorrowed + 1)
+            : assets.mulDivDown(totalSupply() + 1, _totalAssets + currentTotalBorrowed + 1);
+    }
+
+    function _convertToAssets(uint256 shares, bool roundUp) internal view virtual returns (uint256) {
+        (uint256 currentTotalBorrowed,,) = _interestCalc();
+
+        return roundUp
+            ? shares.mulDivUp(totalAssets() + currentTotalBorrowed + 1, totalSupply() + 1)
+            : shares.mulDivDown(totalAssets() + currentTotalBorrowed + 1, totalSupply() + 1);
     }
 
     function deposit(
@@ -145,9 +210,142 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return super.transferFrom(from, to, value);
     }
 
+    function createVaultSnapshot() internal {
+        if (snapshot.length == 0) {
+            snapshotCreated = doCreateVaultSnapshot();
+        }
+    }
+
+    function doCreateVaultSnapshot() internal virtual returns (bytes memory) {
+        (uint256 currentTotalBorrowed,) = _accrueInterest();
+
+        return abi.encode(_convertToAssets(totalSupply(), false), currentTotalBorrowed);
+    }
+
     // IWorkshopVault
-    function borrow(uint256 assets, address receiver) external {}
-    function repay(uint256 assets, address receiver) external {}
-    function pullDebt(address from, uint256 assets) external returns (bool) {}
-    function liquidate(address violator, address collateral) external {}
+
+    function borrow(uint256 assets, address receiver) external callThroughEVC nonReentrant {
+        address msgSender = _msgSenderForBorrow();
+
+        createVaultSnapshot();
+
+        require(assets != 0, "ZERO_ASSETS");
+
+        receiver = getAccountOwner(receiver);
+
+        _increaseOwed(msgSender, assets);
+
+        emit Borrow(msgSender, receiver, assets);
+
+        asset.safeTransfer(receiver, assets);
+
+        _totalAssets -= assets;
+
+        requireAccountAndVaultStatusCheck(msgSender);
+    }
+
+    function repay(uint256 assets, address receiver) external callThroughEVC nonReentrant {
+        address msgSender = _msgSender();
+
+        // sanity check: the receiver must be under control of the EVC. otherwise, we allowed to disable this vault as
+        // the controller for an account with debt
+        if (!isControllerEnabled(receiver, address(this))) {
+            revert ControllerDisabled();
+        }
+
+        createVaultSnapshot();
+
+        require(assets != 0, "ZERO_ASSETS");
+
+        asset.safeTransferFrom(msgSender, address(this), assets);
+
+        _totalAssets += assets;
+
+        _decreaseOwed(receiver, assets);
+
+        emit Repay(msgSender, receiver, assets);
+
+        requireAccountAndVaultStatusCheck(address(0));
+    }
+
+    function pullDebt(address from, uint256 assets) external callThroughEVC nonReentrant returns (bool) {
+        address msgSender = _msgSenderForBorrow();
+
+        // sanity check: the account from which the debt is pulled must be under control of the EVC.
+        // _msgSenderForBorrow() checks that `msgSender` is controlled by this vault
+        if (!isControllerEnabled(from, address(this))) {
+            revert ControllerDisabled();
+        }
+
+        createVaultSnapshot();
+
+        require(assets != 0, "ZERO_AMOUNT");
+        require(msgSender != from, "SELF_DEBT_PULL");
+
+        _decreaseOwed(from, assets);
+        _increaseOwed(msgSender, assets);
+
+        emit Repay(msgSender, from, assets);
+        emit Borrow(msgSender, msgSender, assets);
+
+        requireAccountAndVaultStatusCheck(msgSender);
+
+        return true;
+    }
+
+    function liquidate(
+        address violator,
+        address collateral,
+        uint256 repayAssets
+    ) external callThroughEVC nonReentrant {
+        address msgSender = _msgSenderForBorrow();
+
+        if (msgSender == violator) {
+            revert SelfLiquidation();
+        }
+
+        if (repayAssets == 0) {
+            revert RepayAssetsInsufficient();
+        }
+
+        
+        if (isAccountStatusCheckDeferred(violator)) {
+            revert ViolatorStatusCheckDeferred();
+        }
+
+        
+        if (!isControllerEnabled(violator, address(this))) {
+            revert ControllerDisabled();
+        }
+
+        createVaultSnapshot();
+
+        uint256 seizeShares = _calculateSharesToSeize(violator, collateral, repayAssets);
+
+        _decreaseOwed(violator, repayAssets);
+        _increaseOwed(msgSender, repayAssets);
+
+        emit Repay(msgSender, violator, repayAssets);
+        emit Borrow(msgSender, msgSender, repayAssets);
+
+        if (collateral == address(this)) {
+            
+            if (!isCollateralEnabled(violator, collateral)) {
+                revert CollateralDisabled();
+            }
+
+            balanceOf[violator] -= seizeShares;
+            balanceOf[msgSender] += seizeShares;
+
+            emit Transfer(violator, msgSender, seizeShares);
+        } else {
+            
+            liquidateCollateralShares(collateral, violator, msgSender, seizeShares);
+
+            
+            forgiveAccountStatusCheck(violator);
+        }
+
+        requireAccountAndVaultStatusCheck(msgSender);
+    }
 }
