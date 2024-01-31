@@ -9,13 +9,13 @@
 1. What is the main difference between the operator and the controller?
     - With controllers, an account can only have one controller at a time and it has control over the collateral assets. For the operators, each sub-account can install one or more operators. They can perform actions on behalf of the account and can be disabled at any time.
 1. What does it mean to defer the account and vault status checks? What is the purpose of this deferral?
-    - This means delaying these verifications until a later point in the transaction process. For gas optimization and computational load during the operations.
+    - This means delaying these verifications until a later point in the transaction process. For gas optimization and temporary violations of checks during the batch of operations.
 1. Why is it useful to allow re-entrancy for `call` and `batch` functions?
-    - 
+    - It's useful for enabling more complex interactions with other contract within batches. This allows a contract to call others and possibly itself in a recursive manner during a single transaction.
 1. How does the simulation feature of the EVC work?
-    - 
+    - The simulation mechanics: It calls batchSimulation() instead of batch() because normal batch calls waste gas and don't return any data. However, simulations collect the return data, reverting with this data as error data, try-catching that execption, and returns the caught error data.
 1. Provide a couple of use cases for the `permit` functionality of the EVC.
-    - 
+    - This method allows these use cases: delegated transactions allowing another party/address to execute transactions on their behalf without transfering the actual assets. It also streamlines approvals by enabling one-step approval process enhancing UX and transaction costs.
 1. What is the purpose of the nonce namespace?
     - 
 1. Why should the EVC neither be given any privileges nor hold any tokens?
