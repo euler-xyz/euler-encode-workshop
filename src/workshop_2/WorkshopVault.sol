@@ -252,7 +252,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
 {
     require(
         evc.isControllerEnabled(_msgSender(), address(this)),
-        "oops you can't borrow"
+        "oops you cannot borrow"
     );
 
     if (assets <= 0) {
