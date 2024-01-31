@@ -239,13 +239,14 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
         return msg.sender;
     }
-     function disableController() external {
+function disableController() external {
         if (debtor[_msgSender()] > 0) {
             revert();
         } else {
             evc.disableController(_msgSender());
         }
-     function borrow(uint256 assets, address receiver)
+     }
+function borrow(uint256 assets, address receiver)
     external
     callThroughEVC
     withChecks(_msgSenderBorrower())
@@ -345,4 +346,3 @@ function maxRedeem(address owner)
 
    
 }
-
