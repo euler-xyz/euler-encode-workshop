@@ -59,7 +59,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     // IVault
     // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
     function disableController() external {
-        evc.disableController(_msgSender());
+        evc.disableController(_msgSenderForBorrow());
     }
 
     // [ASSIGNMENT]: provide a couple use cases for this function
@@ -134,8 +134,40 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
     }
 
     // IWorkshopVault
-    function borrow(uint256 assets, address receiver) external {}
+    function borrow(uint256 assets, address receiver) external {
+	}
+
     function repay(uint256 assets, address receiver) external {}
+
     function pullDebt(address from, uint256 assets) external returns (bool) {}
+
     function liquidate(address violator, address collateral) external {}
+
+	function maxWithdraw(address from) external returns (uint256) {
+		// return amount / 2
+	}
+
+	function maxRedeem(address from) external {}
+
+	function convertToShares(uint256 amount) external {}
+
+	function convertToAssets(uint256 amount) external {}
+
+    function _msgSenderForBorrow() internal view returns (address) {
+        address sender = msg.sender;
+        bool controllerEnabled;
+
+        if (sender == address(evc)) {
+            (sender, controllerEnabled) = evc.getCurrentOnBehalfOfAccount(address(this));
+        } else {
+            controllerEnabled = evc.isControllerEnabled(sender, address(this));
+        }
+
+        if (!controllerEnabled) {
+            revert ControllerDisabled();
+        }
+
+        return sender;
+    }
+
 }
