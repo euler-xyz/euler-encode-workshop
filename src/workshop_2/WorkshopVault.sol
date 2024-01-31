@@ -35,7 +35,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         assetss = _asset;
     }
 
-    // [ASSIGNMENT]: what is the purpose of this modifier?
+  
     modifier callThroughEVC() {
         if (msg.sender == address(evc)) {
             _;
@@ -53,8 +53,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // [ASSIGNMENT]: why the account status check might not be necessary in certain situations?
-    // [ASSIGNMENT]: is the vault status check always necessary? why?
+  
     modifier withChecks(address account) {
         //do take the snapshot of the vault and compare with the borrow cap
         //totalBorrowedasset > borrowCap ? revert
@@ -68,9 +67,6 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // [ASSIGNMENT]: can this function be used to authenticate the account for the sake of the borrow-related
-    // operations? why?
-    // [ASSIGNMENT]: if the answer to the above is "no", how this function could be modified to allow safe borrowing?
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(evc)) {
             (address onBehalfOfAccount, ) = evc.getCurrentOnBehalfOfAccount(
@@ -82,13 +78,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         }
     }
 
-    // IVault
-    // [ASSIGNMENT]: why this function is necessary? is it safe to unconditionally disable the controller?
-    // function disableController() external {
-    //     evc.disableController(_msgSender());
-    // }
-
-    // [ASSIGNMENT]: provide a couple use cases for this function
+    
     function checkAccountStatus(address account, address[] calldata collaterals)
         public
         virtual
@@ -105,7 +95,7 @@ contract WorkshopVault is ERC4626, IVault, IWorkshopVault {
         return IVault.checkAccountStatus.selector;
     }
 
-    // [ASSIGNMENT]: provide a couple use cases for this function
+  
     function checkVaultStatus() public virtual returns (bytes4 magicValue) {
         require(msg.sender == address(evc), "only evc can call this");
         require(
