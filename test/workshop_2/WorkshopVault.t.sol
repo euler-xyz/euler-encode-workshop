@@ -235,4 +235,60 @@ contract VaultTest is ERC4626Test {
         vm.expectRevert();
         vault.disableController();
     }
+
+    function test_assigment_liquidate(address alice, address bob, uint64 amount) public {
+        vm.assume(alice != address(0) && alice != address(_evc_) && alice != address(_vault_));
+        vm.assume(bob != address(0) && bob != address(_evc_) && bob != address(_vault_));
+        vm.assume(!_evc_.haveCommonOwner(alice, bob));
+        vm.assume(amount > 1e18);
+
+        uint256 amountToBorrow = amount - amount / 11;
+        ERC20 underlying = ERC20(_underlying_);
+        WorkshopVault vault = WorkshopVault(_vault_);
+
+        // mint some assets to alice
+        ERC20Mock(_underlying_).mint(alice, amount);
+
+        // mint some assets to bob
+        ERC20Mock(_underlying_).mint(bob, amount);
+
+        // alice approves the vault to spend her assets
+        vm.prank(alice);
+        underlying.approve(address(vault), type(uint256).max);
+
+        // alice deposits an amount
+        vm.prank(alice);
+        vault.deposit(amount, alice);
+
+        // alice enables controller
+        vm.prank(alice);
+        _evc_.enableController(alice, address(vault));
+
+        // alice borrows
+        vm.prank(alice);
+        vault.borrow(amountToBorrow, alice);
+
+        // varify alice's balance. despite amount borrowed, she should still hold shares worth the full amount
+        assertEq(underlying.balanceOf(alice), amountToBorrow);
+        assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
+
+        // verify maxWithdraw and maxRedeem functions
+        assertEq(vault.maxWithdraw(alice), amount - amountToBorrow);
+        assertEq(vault.convertToAssets(vault.maxRedeem(alice)), amount - amountToBorrow);
+
+        // verify conversion functions
+        assertEq(vault.convertToShares(amount), vault.balanceOf(alice));
+        assertEq(vault.convertToAssets(vault.balanceOf(alice)), amount);
+
+        // Time passes and alice's account becomes unhealthy
+        vm.warp(block.timestamp + 365 days);
+
+        // bob enables controller
+        vm.prank(bob);
+        _evc_.enableController(bob, address(vault));
+
+        // bob liquidates alice's debt
+        vm.prank(bob);
+        vault.liquidate(alice, address(_underlying_));
+    }
 }

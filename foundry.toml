@@ -8,6 +8,7 @@ remappings = [
     "openzeppelin/=lib/openzeppelin-contracts/contracts/",
     "evc/=lib/ethereum-vault-connector/src/",
     "evc-playground/=lib/evc-playground/src/",
+    "solmate/=lib/evc-playground/lib/solmate/src/",
     "a16z-erc4626-tests/=lib/erc4626-tests/"
 ]
 
