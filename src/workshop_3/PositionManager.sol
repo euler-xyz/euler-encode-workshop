@@ -91,6 +91,7 @@ contract PositionManager is Owned, AutomationCompatibleInterface {
     function performUpkeep(
         bytes calldata /* performData */
     ) external override {
+//SANITY CHECK TO ENSURE THE CHAINLINK NODE INTEGRITY
         if ((block.timestamp - lastBlockTimeStamp) > rebalanceTimer) {
             lastBlockTimeStamp = block.timestamp;
             rebalance(Owner);
@@ -101,7 +102,7 @@ contract PositionManager is Owned, AutomationCompatibleInterface {
     function rebalance() internal onlyOwner returns (bool) {
         //msg.sender must be a registered operator in the PositionManager contract
 
-        //CHECKSSSS
+     
         if (Manager[msg.sender][Owner].length <= 0) {
             revert not_Registered();
         }
