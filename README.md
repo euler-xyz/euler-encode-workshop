@@ -26,7 +26,7 @@ Workshop presentation slides can be found here:
 
 * [Workshop 1](https://docs.google.com/presentation/d/1nQfDXEJFMHLgT8JYrPZxzeVS3b5mPBwLhJOuTntjzyo/edit?usp=sharing)
 * [Workshop 2](https://docs.google.com/presentation/d/1cYceiIXRDbtpzzimj0QuOh4wY53ZfSjKYaugQz_cql0/edit?usp=sharing)
-* [Workshop 3](https://docs.google.com/presentation/d/1RvB05rKljiRSf9Dl-FJYot8Ct1iLWpGmP3fwGYxGCrQ/edit?usp=sharing)
+* [Workshop 3]()
 
 ## Assignments
 
